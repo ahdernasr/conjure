@@ -5,7 +5,13 @@ from pydantic import BaseModel
 from ..database import get_db
 from ..services.mistral_client import MistralClientWrapper
 from ..services.app_service import AppService
-from ..services.generator import generate_app_pipeline, iterate_app_pipeline
+from ..services.generator import (
+    generate_app_pipeline,
+    iterate_app_pipeline,
+    extract_app_name_from_spec,
+    AUGMENTATION_SYSTEM_PROMPT,
+    ITERATION_AUGMENTATION_SYSTEM_PROMPT,
+)
 from ..services import golden
 
 logger = logging.getLogger(__name__)
@@ -50,12 +56,21 @@ async def generate_app(request: GenerateRequest, db=Depends(get_db)):
         )
 
     # Agentic pipeline
-    app_name = request.prompt.strip()[:50]
     client = MistralClientWrapper()
 
+    # Pass 1: Augment terse prompt into full spec
+    augmented_prompt = await client.augment_prompt(
+        request.prompt, AUGMENTATION_SYSTEM_PROMPT
+    )
+    app_name = extract_app_name_from_spec(
+        augmented_prompt, request.prompt.strip()[:50]
+    )
+    logger.info(f"Augmented prompt for {app_id}: app_name={app_name}")
+
     try:
+        # Pass 2: Generate app from augmented spec
         success, theme_color = await generate_app_pipeline(
-            client, request.prompt, app_id, app_name
+            client, augmented_prompt, app_id, app_name
         )
     except Exception as e:
         logger.error(f"Pipeline exception for {app_id}: {e}")
@@ -93,9 +108,15 @@ async def iterate_app(request: IterateRequest, db=Depends(get_db)):
 
     client = MistralClientWrapper()
 
+    # Augment iteration instruction into detailed spec
+    augmented_instruction = await client.augment_prompt(
+        request.instruction, ITERATION_AUGMENTATION_SYSTEM_PROMPT
+    )
+    logger.info(f"Augmented iteration for {request.app_id}")
+
     try:
         success, theme_color = await iterate_app_pipeline(
-            client, request.instruction, request.app_id, app["name"]
+            client, augmented_instruction, request.app_id, app["name"]
         )
     except Exception as e:
         logger.error(f"Iterate pipeline exception for {request.app_id}: {e}")

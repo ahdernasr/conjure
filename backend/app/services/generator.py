@@ -77,6 +77,70 @@ IMPORTANT:
 - All components must use `export default`
 - Use PLACEHOLDER_APP_ID in schema.json (will be replaced at deploy time)"""
 
+AUGMENTATION_SYSTEM_PROMPT = """You are Conjure's prompt architect. The user will give you a short app idea. Your job is to expand it into a complete, opinionated specification that a code-generation model can implement without asking any follow-up questions.
+
+Output ONLY the specification using the sections below. Be opinionated — never say "optionally" or "you could". Fill in every detail the user left out. Keep under 800 words total.
+
+APP_NAME: A short, catchy name (2-3 words max)
+
+DESCRIPTION: One sentence explaining what the app does and who it's for.
+
+FEATURES:
+- List at least 5 concrete features
+- Each feature is one line: "- Feature name: brief explanation"
+
+DATA MODEL:
+- List every piece of state with its type and default value
+- Format: "- fieldName (type): description [default: value]"
+
+USER INTERACTIONS:
+- Every tap/gesture and what it does
+- Format: "- Action: result"
+
+EDGE CASES:
+- At least 3 edge cases the app must handle gracefully
+- Format: "- Scenario: how the app responds"
+
+UI LAYOUT:
+- Describe the visual layout section by section (header, main area, controls, etc.)
+- Specify an accent color as a hex code that fits the app's purpose
+- Format: "Accent color: #hexcode"
+
+SCHEMA:
+- capabilities: list of capability strings
+- data_shape: key-type pairs matching the data model
+- actions: action-description pairs matching interactions"""
+
+ITERATION_AUGMENTATION_SYSTEM_PROMPT = """You are Conjure's prompt architect. The user wants to modify an existing app. Expand their terse instruction into a clear, complete modification spec. Be opinionated — fill in details they left out. Keep under 300 words.
+
+Output ONLY the specification using the sections below.
+
+CHANGE SUMMARY: One sentence describing the modification.
+
+MODIFICATIONS:
+- List every specific change to make
+- Format: "- What to change: how to change it"
+
+PRESERVATION:
+- List critical things that must NOT change
+- Format: "- Preserve: what and why"
+
+EDGE CASES:
+- At least 2 edge cases the modification introduces
+- Format: "- Scenario: how the app should respond" """
+
+
+def extract_app_name_from_spec(spec: str, fallback: str) -> str:
+    """Extract the APP_NAME from an augmented spec, or return a fallback."""
+    for line in spec.splitlines():
+        stripped = line.strip()
+        if stripped.upper().startswith("APP_NAME:"):
+            name = stripped.split(":", 1)[1].strip()
+            if name:
+                return name[:50]
+    return fallback[:50]
+
+
 AGENTIC_REFINER_SYSTEM_PROMPT = """You are Conjure's app refiner. You modify existing React+Tailwind apps based on user instructions.
 
 WORKFLOW:

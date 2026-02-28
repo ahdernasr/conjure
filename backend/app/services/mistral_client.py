@@ -30,6 +30,32 @@ class MistralClientWrapper:
         )
         return response.choices[0].message.content
 
+    # -- Prompt Augmentation ---------------------------------------------------
+
+    async def augment_prompt(self, prompt: str, system_prompt: str) -> str:
+        """Use Mistral Large to expand a terse prompt into a full spec.
+
+        Falls back to the raw prompt on any failure.
+        """
+        try:
+            response = await self._client.chat.complete_async(
+                model=settings.MISTRAL_LARGE_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.4,
+            )
+            result = response.choices[0].message.content
+            if result and result.strip():
+                logger.info(f"Augmented prompt ({len(result)} chars) from input ({len(prompt)} chars)")
+                return result.strip()
+            logger.warning("Augmentation returned empty response, using raw prompt")
+            return prompt
+        except Exception as e:
+            logger.warning(f"Augmentation failed, using raw prompt: {e}")
+            return prompt
+
     # -- Agentic Loop ----------------------------------------------------------
 
     async def run_agentic_loop(
@@ -116,7 +142,7 @@ class MistralClientWrapper:
 
     async def generate_app(self, prompt: str, build_dir: str) -> list[dict]:
         """Run agentic generation loop. Returns message history."""
-        user_message = f"Create this app: {prompt}"
+        user_message = f"Create the following app according to this specification:\n\n{prompt}"
         return await self.run_agentic_loop(
             AGENTIC_GENERATOR_SYSTEM_PROMPT,
             user_message,
@@ -127,7 +153,7 @@ class MistralClientWrapper:
 
     async def refine_app(self, instruction: str, build_dir: str) -> list[dict]:
         """Run agentic refinement loop. Returns message history."""
-        user_message = f"Modify the existing app with this instruction: {instruction}"
+        user_message = f"Modify the existing app according to this specification:\n\n{instruction}"
         return await self.run_agentic_loop(
             AGENTIC_REFINER_SYSTEM_PROMPT,
             user_message,
