@@ -1,14 +1,15 @@
 from mistralai import Mistral
 from ..config import settings
+from .generator import GENERATOR_SYSTEM_PROMPT, REFINER_SYSTEM_PROMPT
 
 
 class MistralClientWrapper:
-    """Wraps the Mistral SDK. Phase 1: chat only. Phase 2+: agents."""
+    """Wraps the Mistral SDK."""
 
     def __init__(self):
         self._client = Mistral(api_key=settings.MISTRAL_API_KEY)
 
-    # -- Phase 1: Simple Chat --------------------------------------------------
+    # -- Simple Chat -----------------------------------------------------------
 
     async def chat(self, message: str, model: str | None = None) -> str:
         """Send a message, get a text response."""
@@ -18,39 +19,45 @@ class MistralClientWrapper:
         )
         return response.choices[0].message.content
 
-    # -- Phase 2: Generator Agent ----------------------------------------------
+    # -- Generator Agent -------------------------------------------------------
 
     async def generate_app(self, prompt: str, app_id: str) -> str:
-        """Phase 2: Send prompt to Codestral with generator system prompt.
-        Returns raw HTML string of the generated app.
+        """Send prompt to Codestral with generator system prompt.
+        Returns raw response text (HTML, possibly with markdown fences)."""
+        system_prompt = GENERATOR_SYSTEM_PROMPT.replace("{{APP_ID}}", app_id)
 
-        Will:
-        1. Build messages with GENERATOR_SYSTEM_PROMPT
-        2. Call chat.complete_async with codestral model
-        3. Parse response to extract HTML
-        4. Inject phone-home sync script with app_id
-        """
-        raise NotImplementedError("Phase 2")
+        response = await self._client.chat.complete_async(
+            model=settings.CODESTRAL_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Create this app: {prompt}"},
+            ],
+            temperature=0.3,
+        )
+        return response.choices[0].message.content
+
+    # -- Refiner Agent ---------------------------------------------------------
 
     async def refine_app(self, existing_html: str, instruction: str, app_id: str) -> str:
-        """Phase 2: Modify existing app based on user instruction.
-
-        Will:
-        1. Build messages with existing code + modification request
-        2. Call Codestral with refiner system prompt
-        3. Return updated HTML
-        """
-        raise NotImplementedError("Phase 2")
+        """Modify existing app based on user instruction.
+        Returns raw response text (updated HTML)."""
+        response = await self._client.chat.complete_async(
+            model=settings.CODESTRAL_MODEL,
+            messages=[
+                {"role": "system", "content": REFINER_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"Here is the existing app HTML:\n\n{existing_html}\n\nModification requested: {instruction}",
+                },
+            ],
+            temperature=0.2,
+        )
+        return response.choices[0].message.content
 
     # -- Phase 3: Command Plane Agent ------------------------------------------
 
     async def command_query(self, message: str, conversation_id: str | None = None) -> tuple[str, str]:
-        """Phase 3: Send query to Command Plane, handle tool calls.
-        Returns (response_text, conversation_id).
-
-        Will use Mistral Agents API with function calling tools:
-        - list_apps, query_app, update_app, summarize_all
-        """
+        """Phase 3: Send query to Command Plane, handle tool calls."""
         raise NotImplementedError("Phase 3")
 
     # -- Phase 4: Voice helpers ------------------------------------------------

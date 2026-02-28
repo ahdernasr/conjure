@@ -63,3 +63,18 @@ class AppService:
         if not data_path.exists():
             return {}
         return json.loads(data_path.read_text())
+
+    def get_app_html(self, app_id: str) -> str | None:
+        """Read the generated HTML for an app."""
+        html_path = self.apps_dir / app_id / "index.html"
+        if not html_path.exists():
+            return None
+        return html_path.read_text(encoding="utf-8")
+
+    async def update_theme(self, app_id: str, theme_color: str) -> None:
+        """Update the theme color in the database."""
+        await self.db.execute(
+            "UPDATE apps SET theme_color = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (theme_color, app_id),
+        )
+        await self.db.commit()
