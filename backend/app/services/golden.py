@@ -1,12 +1,60 @@
 """Golden app templates — pre-built, pre-tested fallbacks for demo."""
 
+from .generator import (
+    write_app_files,
+    replace_app_id_placeholder,
+    inject_sync_script,
+    extract_theme_color,
+)
+
 GOLDEN_NAMES = {
     "hiit": "HIIT Timer",
     "poker": "Poker Scoreboard",
     "packing": "Packing List",
 }
 
+# Keywords for matching prompts to golden templates
+GOLDEN_KEYWORDS = {
+    "hiit": ["hiit", "timer", "workout", "exercise", "fitness", "interval", "tabata", "training"],
+    "poker": ["poker", "card", "scoreboard", "score", "chip", "game", "casino", "betting"],
+    "packing": ["packing", "pack", "list", "checklist", "travel", "trip", "luggage", "suitcase"],
+}
+
 GOLDEN_TEMPLATES = {}
+
+
+def deploy_golden(golden_id: str, app_id: str) -> tuple[str, str, str]:
+    """Deploy a golden template for the given app_id.
+    Returns (app_name, theme_color, html)."""
+    raw_html = GOLDEN_TEMPLATES[golden_id]
+    app_name = GOLDEN_NAMES[golden_id]
+
+    html = replace_app_id_placeholder(raw_html, app_id)
+    theme_color = extract_theme_color(html)
+    html = inject_sync_script(html, app_id)
+
+    write_app_files(app_id, html, app_name, theme_color)
+    return app_name, theme_color, html
+
+
+def pick_best_golden(prompt: str) -> str | None:
+    """Simple keyword matching to pick the most relevant golden template.
+    Returns golden_id or None if no good match."""
+    prompt_lower = prompt.lower()
+    best_id = None
+    best_score = 0
+
+    for golden_id, keywords in GOLDEN_KEYWORDS.items():
+        score = sum(1 for kw in keywords if kw in prompt_lower)
+        if score > best_score:
+            best_score = score
+            best_id = golden_id
+
+    # Return the best match, or a default if nothing matched
+    if best_id:
+        return best_id
+    # Default to packing list as the most generic template
+    return "packing"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. HIIT TIMER

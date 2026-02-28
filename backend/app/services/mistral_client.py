@@ -1,6 +1,17 @@
+import json
+import logging
 from mistralai import Mistral
 from ..config import settings
-from .generator import GENERATOR_SYSTEM_PROMPT, REFINER_SYSTEM_PROMPT
+from .generator import (
+    GENERATOR_SYSTEM_PROMPT,
+    REFINER_SYSTEM_PROMPT,
+    AGENTIC_GENERATOR_SYSTEM_PROMPT,
+    AGENTIC_REFINER_SYSTEM_PROMPT,
+    AGENTIC_TOOLS,
+    create_tool_executor,
+)
+
+logger = logging.getLogger(__name__)
 
 
 class MistralClientWrapper:
@@ -19,10 +30,184 @@ class MistralClientWrapper:
         )
         return response.choices[0].message.content
 
-    # -- Generator Agent -------------------------------------------------------
+    # -- Agentic Loop ----------------------------------------------------------
 
-    async def generate_app(self, prompt: str, app_id: str) -> str:
-        """Send prompt to Devstral with generator system prompt.
+    async def run_agentic_loop(
+        self,
+        system_prompt: str,
+        user_message: str,
+        build_dir: str,
+        max_turns: int = 25,
+    ) -> list[dict]:
+        """Run Devstral in agentic mode with tool calls.
+
+        Returns the full message history for potential follow-up (e.g. build error fixes).
+        """
+        tool_executor = create_tool_executor(build_dir)
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ]
+
+        for turn in range(max_turns):
+            # First turn: force at least one tool call
+            tool_choice = "any" if turn == 0 else "auto"
+
+            response = await self._client.chat.complete_async(
+                model=settings.DEVSTRAL_MODEL,
+                messages=messages,
+                tools=AGENTIC_TOOLS,
+                tool_choice=tool_choice,
+                temperature=0.3,
+            )
+
+            choice = response.choices[0]
+            assistant_msg = choice.message
+
+            # Build the assistant message dict for history
+            assistant_dict = {"role": "assistant", "content": assistant_msg.content or ""}
+            if assistant_msg.tool_calls:
+                assistant_dict["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in assistant_msg.tool_calls
+                ]
+            messages.append(assistant_dict)
+
+            # If no tool calls, the model is done
+            if not assistant_msg.tool_calls:
+                logger.info(f"Agentic loop completed after {turn + 1} turns")
+                break
+
+            # Execute each tool call and append results
+            for tc in assistant_msg.tool_calls:
+                tool_name = tc.function.name
+                try:
+                    args = json.loads(tc.function.arguments)
+                except (json.JSONDecodeError, TypeError):
+                    args = {}
+
+                logger.info(f"Tool call: {tool_name}({list(args.keys())})")
+                result = tool_executor(tool_name, args)
+
+                # Truncate very long results to avoid context overflow
+                if len(result) > 10000:
+                    result = result[:10000] + "\n... (truncated)"
+
+                messages.append({
+                    "role": "tool",
+                    "name": tool_name,
+                    "content": result,
+                    "tool_call_id": tc.id,
+                })
+        else:
+            logger.warning(f"Agentic loop hit max turns ({max_turns})")
+
+        return messages
+
+    # -- Generator Agent (Agentic) ---------------------------------------------
+
+    async def generate_app(self, prompt: str, build_dir: str) -> list[dict]:
+        """Run agentic generation loop. Returns message history."""
+        user_message = f"Create this app: {prompt}"
+        return await self.run_agentic_loop(
+            AGENTIC_GENERATOR_SYSTEM_PROMPT,
+            user_message,
+            build_dir,
+        )
+
+    # -- Refiner Agent (Agentic) -----------------------------------------------
+
+    async def refine_app(self, instruction: str, build_dir: str) -> list[dict]:
+        """Run agentic refinement loop. Returns message history."""
+        user_message = f"Modify the existing app with this instruction: {instruction}"
+        return await self.run_agentic_loop(
+            AGENTIC_REFINER_SYSTEM_PROMPT,
+            user_message,
+            build_dir,
+        )
+
+    # -- Build Error Fix -------------------------------------------------------
+
+    async def fix_build_error(
+        self,
+        error_output: str,
+        build_dir: str,
+        messages: list[dict],
+    ) -> list[dict]:
+        """Append build error as user message and continue the agentic loop."""
+        tool_executor = create_tool_executor(build_dir)
+
+        messages.append({
+            "role": "user",
+            "content": (
+                f"The Vite build failed with the following error:\n\n```\n{error_output}\n```\n\n"
+                "Please fix the code and write the corrected files."
+            ),
+        })
+
+        # Continue the agentic loop
+        for turn in range(10):
+            response = await self._client.chat.complete_async(
+                model=settings.DEVSTRAL_MODEL,
+                messages=messages,
+                tools=AGENTIC_TOOLS,
+                tool_choice="any" if turn == 0 else "auto",
+                temperature=0.2,
+            )
+
+            choice = response.choices[0]
+            assistant_msg = choice.message
+
+            assistant_dict = {"role": "assistant", "content": assistant_msg.content or ""}
+            if assistant_msg.tool_calls:
+                assistant_dict["tool_calls"] = [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.function.name,
+                            "arguments": tc.function.arguments,
+                        },
+                    }
+                    for tc in assistant_msg.tool_calls
+                ]
+            messages.append(assistant_dict)
+
+            if not assistant_msg.tool_calls:
+                break
+
+            for tc in assistant_msg.tool_calls:
+                tool_name = tc.function.name
+                try:
+                    args = json.loads(tc.function.arguments)
+                except (json.JSONDecodeError, TypeError):
+                    args = {}
+
+                result = tool_executor(tool_name, args)
+                if len(result) > 10000:
+                    result = result[:10000] + "\n... (truncated)"
+
+                messages.append({
+                    "role": "tool",
+                    "name": tool_name,
+                    "content": result,
+                    "tool_call_id": tc.id,
+                })
+
+        return messages
+
+    # -- Legacy (non-agentic, for golden fallback) -----------------------------
+
+    async def generate_app_legacy(self, prompt: str, app_id: str) -> str:
+        """Send prompt to Devstral with generator system prompt (legacy HTML mode).
         Returns raw response text (HTML, possibly with markdown fences)."""
         system_prompt = GENERATOR_SYSTEM_PROMPT.replace("{{APP_ID}}", app_id)
 
@@ -36,10 +221,8 @@ class MistralClientWrapper:
         )
         return response.choices[0].message.content
 
-    # -- Refiner Agent ---------------------------------------------------------
-
-    async def refine_app(self, existing_html: str, instruction: str, app_id: str) -> str:
-        """Modify existing app based on user instruction.
+    async def refine_app_legacy(self, existing_html: str, instruction: str, app_id: str) -> str:
+        """Modify existing app based on user instruction (legacy HTML mode).
         Returns raw response text (updated HTML)."""
         response = await self._client.chat.complete_async(
             model=settings.DEVSTRAL_MODEL,

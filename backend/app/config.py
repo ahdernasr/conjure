@@ -6,10 +6,13 @@ class Settings(BaseSettings):
     MISTRAL_API_KEY: str = ""
     ELEVENLABS_API_KEY: str = ""
     HOST: str = "0.0.0.0"
-    PORT: int = 8000
+    PORT: int = 8001
     FRONTEND_URL: str = "http://localhost:5173"
     DATABASE_PATH: str = "conjure.db"
     APPS_DIR: str = "apps"
+    TEMPLATE_DIR: str = "app/template"
+    MAX_BUILD_RETRIES: int = 2
+    BUILD_TIMEOUT: int = 60
 
     # Model assignments
     DEVSTRAL_MODEL: str = "devstral-2512"            # Generator + Refiner (agentic coding)

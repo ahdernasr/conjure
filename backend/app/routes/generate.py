@@ -1,12 +1,14 @@
+import logging
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from ..database import get_db
 from ..services.mistral_client import MistralClientWrapper
 from ..services.app_service import AppService
-from ..services.generator import process_generated_html, write_app_files
+from ..services.generator import generate_app_pipeline, iterate_app_pipeline
 from ..services import golden
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -33,25 +35,41 @@ async def generate_app(request: GenerateRequest, db=Depends(get_db)):
     """Generate a new app from a text prompt."""
     app_id = uuid.uuid4().hex[:12]
 
-    # Use golden template if requested
+    # Use golden template if explicitly requested
     if request.golden_id and request.golden_id in golden.GOLDEN_TEMPLATES:
-        raw_html = golden.GOLDEN_TEMPLATES[request.golden_id]
-        app_name = golden.GOLDEN_NAMES[request.golden_id]
-    else:
-        # Call Codestral
-        client = MistralClientWrapper()
-        try:
-            raw_html = await client.generate_app(request.prompt, app_id)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Generation failed: {e}")
-        # Derive app name from prompt (first few words)
-        app_name = request.prompt.strip()[:50]
+        app_name, theme_color, _ = golden.deploy_golden(request.golden_id, app_id)
 
-    # Process: parse, replace placeholders, inject sync script
-    html, theme_color = process_generated_html(raw_html, app_id)
+        service = AppService(db)
+        await service.create_app(app_id, app_name, request.prompt, theme_color)
 
-    # Write files to disk
-    write_app_files(app_id, html, app_name, theme_color)
+        return GenerateResponse(
+            id=app_id,
+            name=app_name,
+            description=request.prompt,
+            theme_color=theme_color,
+        )
+
+    # Agentic pipeline
+    app_name = request.prompt.strip()[:50]
+    client = MistralClientWrapper()
+
+    try:
+        success, theme_color = await generate_app_pipeline(
+            client, request.prompt, app_id, app_name
+        )
+    except Exception as e:
+        logger.error(f"Pipeline exception for {app_id}: {e}")
+        success = False
+        theme_color = "#6366f1"
+
+    # If pipeline failed, fall back to best golden template
+    if not success:
+        logger.warning(f"Pipeline failed for {app_id}, falling back to golden template")
+        best_golden = golden.pick_best_golden(request.prompt)
+        if best_golden:
+            app_name, theme_color, _ = golden.deploy_golden(best_golden, app_id)
+        else:
+            raise HTTPException(status_code=500, detail="Generation failed")
 
     # Save to database
     service = AppService(db)
@@ -73,23 +91,18 @@ async def iterate_app(request: IterateRequest, db=Depends(get_db)):
     if not app:
         raise HTTPException(status_code=404, detail="App not found")
 
-    # Read existing HTML
-    existing_html = service.get_app_html(request.app_id)
-    if not existing_html:
-        raise HTTPException(status_code=404, detail="App HTML not found")
-
-    # Call refiner
     client = MistralClientWrapper()
+
     try:
-        raw_html = await client.refine_app(existing_html, request.instruction, request.app_id)
+        success, theme_color = await iterate_app_pipeline(
+            client, request.instruction, request.app_id, app["name"]
+        )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Refinement failed: {e}")
+        logger.error(f"Iterate pipeline exception for {request.app_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Iteration failed: {e}")
 
-    # Process the refined HTML
-    html, theme_color = process_generated_html(raw_html, request.app_id)
-
-    # Overwrite files
-    write_app_files(request.app_id, html, app["name"], theme_color)
+    if not success:
+        raise HTTPException(status_code=500, detail="Build failed after retries")
 
     # Update DB
     await service.update_theme(request.app_id, theme_color)
