@@ -4,9 +4,10 @@ import AppCard from "./AppCard";
 interface Props {
   apps: App[];
   loading: boolean;
+  onSelectApp: (appId: string) => void;
 }
 
-export default function AppGallery({ apps, loading }: Props) {
+export default function AppGallery({ apps, loading, onSelectApp }: Props) {
   if (loading) {
     return (
       <div className="text-center text-conjure-muted py-8">Loading apps...</div>
@@ -27,7 +28,7 @@ export default function AppGallery({ apps, loading }: Props) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
       {apps.map((app) => (
-        <AppCard key={app.id} app={app} />
+        <AppCard key={app.id} app={app} onSelect={onSelectApp} />
       ))}
     </div>
   );

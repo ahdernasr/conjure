@@ -1,11 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AppGallery from "./components/AppGallery";
-import AppPreview from "./components/AppPreview";
 import ChatInput from "./components/ChatInput";
 import InstallPrompt from "./components/InstallPrompt";
-import VoiceBar from "./components/VoiceBar";
+import ProjectChat from "./components/ProjectChat";
 import { useApps } from "./hooks/useApps";
 import { useGenerate } from "./hooks/useGenerate";
+import type { App } from "./types/app";
+
+type View = "gallery" | "create" | "chat";
 
 export default function App() {
   const { apps, loading: appsLoading, refresh: refreshApps } = useApps();
@@ -15,101 +17,134 @@ export default function App() {
     generatedAppName,
     error,
     generate,
-    iterate,
     dismiss,
   } = useGenerate(refreshApps);
 
-  const [iterateMode, setIterateMode] = useState(false);
+  const [view, setView] = useState<View>("gallery");
+  const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [showInstall, setShowInstall] = useState(false);
+  const [installAppName, setInstallAppName] = useState("App");
 
-  const handleSend = (message: string) => {
-    if (iterateMode && generatedAppId) {
-      iterate(generatedAppId, message);
-      setIterateMode(false);
-    } else {
-      generate(message);
+  // Auto-navigate to chat view after generation completes
+  useEffect(() => {
+    if (status === "done" && generatedAppId) {
+      setSelectedAppId(generatedAppId);
+      setView("chat");
     }
+  }, [status, generatedAppId]);
+
+  const handleCreate = (message: string) => {
+    generate(message);
   };
 
-  const handleOpenNewTab = () => {
-    if (generatedAppId) {
-      window.open(`/apps/${generatedAppId}/`, "_blank");
-    }
+  const handleSelectApp = (appId: string) => {
+    setSelectedAppId(appId);
+    setView("chat");
   };
 
-  const handleIterate = () => {
-    setIterateMode(true);
+  const handleBack = () => {
+    setSelectedAppId(null);
+    dismiss();
+    setView("gallery");
   };
 
-  const handleCancelIterate = () => {
-    setIterateMode(false);
+  const handleInstall = (appName: string) => {
+    setInstallAppName(appName);
+    setShowInstall(true);
   };
 
   const isGenerating = status === "generating";
 
+  // Build app object for the chat view
+  const selectedApp: App | null = selectedAppId
+    ? apps.find((a) => a.id === selectedAppId) ?? {
+        id: selectedAppId,
+        name: generatedAppName || "Your App",
+        description: "",
+        theme_color: "#6366f1",
+        created_at: "",
+        updated_at: "",
+        status: "ready",
+      }
+    : null;
+
   return (
     <div className="flex flex-col min-h-[100dvh]">
-      {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-conjure-border">
-        <h1 className="text-xl font-bold tracking-tight">Conjure</h1>
-        <span className="text-xs text-conjure-muted">v0.1</span>
-      </header>
-
-      {/* Main content area */}
-      <main className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-        {/* Generation status */}
-        {isGenerating && (
-          <div className="bg-conjure-card border border-conjure-border rounded-xl p-4 text-center">
-            <div className="inline-block w-5 h-5 border-2 border-conjure-accent border-t-transparent
-                            rounded-full animate-spin mb-2" />
-            <p className="text-sm text-conjure-muted">
-              {iterateMode ? "Updating your app..." : "Generating your app..."}
-            </p>
-          </div>
-        )}
-
-        {/* Error */}
-        {status === "error" && error && (
-          <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-4">
-            <p className="text-sm text-red-400">{error}</p>
-          </div>
-        )}
-
-        {/* Preview of generated app */}
-        {status === "done" && generatedAppId && (
-          <AppPreview
-            appId={generatedAppId}
-            appName={generatedAppName}
-            onOpenNewTab={handleOpenNewTab}
-            onInstall={() => setShowInstall(true)}
-            onDismiss={dismiss}
-            onIterate={handleIterate}
-          />
-        )}
-
-        {/* App Gallery */}
-        <AppGallery apps={apps} loading={appsLoading} />
-      </main>
-
-      {/* Bottom input area */}
-      <div className="sticky bottom-0 border-t border-conjure-border bg-conjure-bg px-4 py-3 space-y-2">
-        <ChatInput
-          onSend={handleSend}
-          loading={isGenerating}
-          placeholder={
-            iterateMode
-              ? "Describe what to change..."
-              : "Describe an app you want..."
-          }
-          iterateMode={iterateMode}
-          onCancelIterate={handleCancelIterate}
+      {/* ── Chat View ── */}
+      {view === "chat" && selectedApp ? (
+        <ProjectChat
+          app={selectedApp}
+          onBack={handleBack}
+          onInstall={handleInstall}
         />
-        <VoiceBar />
-      </div>
+      ) : view === "create" ? (
+        /* ── Create View ── */
+        <>
+          <header className="flex items-center gap-3 px-4 py-3 border-b border-conjure-border">
+            <button
+              onClick={() => { dismiss(); setView("gallery"); }}
+              className="text-conjure-muted text-sm min-w-[44px] min-h-[44px] flex items-center"
+            >
+              &larr; Back
+            </button>
+            <h1 className="text-lg font-semibold">New App</h1>
+          </header>
+
+          <main className="flex-1 flex flex-col items-center justify-center px-4 gap-3">
+            {isGenerating ? (
+              <div className="text-center">
+                <div
+                  className="inline-block w-6 h-6 border-2 border-conjure-accent border-t-transparent
+                              rounded-full animate-spin mb-3"
+                />
+                <p className="text-sm text-conjure-muted">
+                  Generating your app...
+                </p>
+              </div>
+            ) : status === "error" && error ? (
+              <div className="w-full max-w-md">
+                <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-4">
+                  <p className="text-sm text-red-400">{error}</p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-conjure-muted text-sm">
+                Describe an app and we'll build it.
+              </p>
+            )}
+          </main>
+
+          <div className="sticky bottom-0 border-t border-conjure-border bg-conjure-bg px-4 py-3">
+            <ChatInput onSend={handleCreate} loading={isGenerating} />
+          </div>
+        </>
+      ) : (
+        /* ── Gallery View ── */
+        <>
+          <header className="flex items-center justify-between px-4 py-3 border-b border-conjure-border">
+            <h1 className="text-xl font-bold tracking-tight">Conjure</h1>
+            <button
+              onClick={() => setView("create")}
+              className="w-9 h-9 rounded-full bg-conjure-accent flex items-center justify-center
+                         text-white text-lg font-bold active:scale-95 transition-transform"
+            >
+              +
+            </button>
+          </header>
+
+          <main className="flex-1 overflow-y-auto px-4 py-4">
+            <AppGallery
+              apps={apps}
+              loading={appsLoading}
+              onSelectApp={handleSelectApp}
+            />
+          </main>
+        </>
+      )}
 
       {/* Install modal */}
       <InstallPrompt
-        appName={generatedAppName || "App"}
+        appName={installAppName}
         visible={showInstall}
         onClose={() => setShowInstall(false)}
       />
