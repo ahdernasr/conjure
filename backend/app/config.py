@@ -11,9 +11,10 @@ class Settings(BaseSettings):
     DATABASE_PATH: str = "conjure.db"
     APPS_DIR: str = "apps"
 
-    # Phase 2+ model settings (defined now, used later)
-    CODESTRAL_MODEL: str = "codestral-latest"
-    MISTRAL_LARGE_MODEL: str = "mistral-large-latest"
+    # Model assignments
+    DEVSTRAL_MODEL: str = "devstral-2512"            # Generator + Refiner (agentic coding)
+    MISTRAL_LARGE_MODEL: str = "mistral-large-latest"  # Command Plane (reasoning)
+    CODESTRAL_MODEL: str = "codestral-latest"        # FIM completion only (unused for now)
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

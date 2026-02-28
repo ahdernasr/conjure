@@ -22,12 +22,12 @@ class MistralClientWrapper:
     # -- Generator Agent -------------------------------------------------------
 
     async def generate_app(self, prompt: str, app_id: str) -> str:
-        """Send prompt to Codestral with generator system prompt.
+        """Send prompt to Devstral with generator system prompt.
         Returns raw response text (HTML, possibly with markdown fences)."""
         system_prompt = GENERATOR_SYSTEM_PROMPT.replace("{{APP_ID}}", app_id)
 
         response = await self._client.chat.complete_async(
-            model=settings.CODESTRAL_MODEL,
+            model=settings.DEVSTRAL_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": f"Create this app: {prompt}"},
@@ -42,7 +42,7 @@ class MistralClientWrapper:
         """Modify existing app based on user instruction.
         Returns raw response text (updated HTML)."""
         response = await self._client.chat.complete_async(
-            model=settings.CODESTRAL_MODEL,
+            model=settings.DEVSTRAL_MODEL,
             messages=[
                 {"role": "system", "content": REFINER_SYSTEM_PROMPT},
                 {
