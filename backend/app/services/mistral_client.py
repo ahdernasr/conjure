@@ -263,12 +263,6 @@ class MistralClientWrapper:
         )
         return response.choices[0].message.content
 
-    # -- Phase 3: Command Plane Agent ------------------------------------------
-
-    async def command_query(self, message: str, conversation_id: str | None = None) -> tuple[str, str]:
-        """Phase 3: Send query to Command Plane, handle tool calls."""
-        raise NotImplementedError("Phase 3")
-
     # -- Phase 4: Voice helpers ------------------------------------------------
 
     async def transcribe(self, audio_bytes: bytes) -> str:

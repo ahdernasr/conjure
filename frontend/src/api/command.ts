@@ -1,5 +1,21 @@
-// Phase 3: Command Plane API
+import { apiRequest } from "./client";
 
-export async function sendCommand(_message: string): Promise<void> {
-  throw new Error("Not implemented: Phase 3");
+export interface CommandResponse {
+  response: string;
+  conversation_id: string;
+  handoff_create: boolean;
+  create_prompt?: string;
+}
+
+export async function sendCommand(
+  message: string,
+  conversationId?: string
+): Promise<CommandResponse> {
+  return apiRequest<CommandResponse>("/command/", {
+    method: "POST",
+    body: JSON.stringify({
+      message,
+      conversation_id: conversationId ?? null,
+    }),
+  });
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import AppGallery from "./components/AppGallery";
 import ChatInput from "./components/ChatInput";
+import CommandBar from "./components/CommandBar";
 import InstallPrompt from "./components/InstallPrompt";
 import ProjectChat from "./components/ProjectChat";
 import { useApps } from "./hooks/useApps";
@@ -139,6 +140,13 @@ export default function App() {
               onSelectApp={handleSelectApp}
             />
           </main>
+
+          <CommandBar
+            onCreateHandoff={(prompt) => {
+              generate(prompt);
+              setView("create");
+            }}
+          />
         </>
       )}
 
