@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+venv/
+.venv/
+*.db
+
+# Node
+node_modules/
+dist/
+
+# Environment
+.env
+
+# Generated apps (tracked per-app, not bulk)
+backend/apps/*/
+!backend/apps/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
