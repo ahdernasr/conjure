@@ -3,7 +3,7 @@
 dev: setup
 	@echo "Starting Conjure..."
 	@echo "  Frontend → http://localhost:5173"
-	@echo "  Backend  → http://localhost:8000"
+	@echo "  Backend  → http://localhost:8001"
 	@echo "  Press Ctrl+C to stop"
 	@bash dev.sh
 

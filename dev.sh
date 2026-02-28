@@ -19,7 +19,7 @@ if [ ! -d venv ]; then
   python3 -m venv venv
   ./venv/bin/pip install -r requirements.txt -q
 fi
-echo "Starting backend on :8000"
+echo "Starting backend on :8001"
 ./venv/bin/python run.py &
 BACKEND_PID=$!
 
@@ -36,7 +36,7 @@ FRONTEND_PID=$!
 echo ""
 echo "Conjure running:"
 echo "  Frontend → http://localhost:5173"
-echo "  Backend  → http://localhost:8000"
+echo "  Backend  → http://localhost:8001"
 echo "  Press Ctrl+C to stop"
 echo ""
 
