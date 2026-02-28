@@ -123,7 +123,7 @@ def inject_sync_script(html: str, app_id: str) -> str:
       navigator.sendBeacon(SYNC_URL, JSON.stringify(data));
     }} catch(e) {{}}
   }}
-  var origSet = window.__conjure.setData;
+  var origSet = window.__conjure.setData.bind(window.__conjure);
   window.__conjure.setData = function(data) {{
     origSet(data);
     syncToServer();
