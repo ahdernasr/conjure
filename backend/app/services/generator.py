@@ -47,7 +47,20 @@ window.__conjure.setData({ ...data, count: data.count + 1 });
 WHAT YOU MUST DO:
 1. Write `src/App.jsx` with your complete app component (REQUIRED)
 2. Write `schema.json` in the project root (REQUIRED) with format:
-   {"app_id":"PLACEHOLDER_APP_ID","name":"App Name","capabilities":["..."],"data_shape":{"key":"type"},"actions":{"action":"description"}}
+   {
+     "app_id": "PLACEHOLDER_APP_ID",
+     "name": "App Name",
+     "capabilities": ["..."],
+     "data_shape": { "key": "type_description" },
+     "actions": {
+       "action_name": {
+         "params": { "param_name": "type" },
+         "description": "Human-readable description of what this action does"
+       }
+     }
+   }
+
+   Every user-facing operation MUST be an action. Include read actions (get_X) and write actions (add_X, remove_X, update_X, toggle_X). Each param must have a type: "string", "number", "boolean". Actions with no params use an empty object {}.
 3. You may create additional component files in `src/` (e.g. `src/Timer.jsx`, `src/utils.js`)
 4. Do NOT import external packages — only use React, react-dom, and Tailwind CSS classes
 
@@ -109,7 +122,7 @@ UI LAYOUT:
 SCHEMA:
 - capabilities: list of capability strings
 - data_shape: key-type pairs matching the data model
-- actions: action-description pairs matching interactions"""
+- actions: for EVERY user operation, provide { "params": {"param": "type"}, "description": "what it does" }. Include both read and write actions."""
 
 ITERATION_AUGMENTATION_SYSTEM_PROMPT = """You are Conjure's prompt architect. The user wants to modify an existing app. Expand their terse instruction into a clear, complete modification spec. Be opinionated — fill in details they left out. Keep under 300 words.
 
@@ -156,7 +169,7 @@ RULES:
 5. Keep the same dark theme and design language
 6. Make ONLY the requested changes
 7. Do NOT modify protected files: src/main.jsx, src/index.css, vite.config.js, package.json, tailwind.config.js, postcss.config.js, index.html
-8. Update schema.json if capabilities or data shape changed
+8. Update schema.json if capabilities, data shape, or actions changed. Every action must have {"params": {...}, "description": "..."} format
 
 HOW DATA WORKS:
 main.jsx defines `window.__conjure` with:
