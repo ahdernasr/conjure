@@ -85,6 +85,7 @@ DESIGN RULES:
 - Use CSS variable classes: bg-background, text-foreground, bg-card, text-card-foreground, bg-primary, text-primary-foreground, bg-secondary, text-secondary-foreground, text-muted-foreground, bg-muted, border-border, bg-destructive
 - Do NOT use hardcoded hex colors. Use the CSS variable classes above.
 - To set a custom accent color, override --primary in a <style> tag: :root { --primary: 142 71% 45%; } (HSL values without commas)
+- Do NOT include an app name header, logo, or branding. These are mini utility apps — jump straight into the functionality.
 - Mobile-first: min tap targets 44px (min-h-[44px] min-w-[44px]), responsive layouts
 - Use shadcn components: Button for actions, Card for containers, Badge for status, Input for text fields, Progress for bars, Tabs for sections, Switch for toggles, Dialog for modals
 - Numbers/stats: text-2xl font-bold tabular-nums
@@ -214,9 +215,10 @@ RULES:
 3. Preserve the localStorage key pattern
 4. Preserve the data structure unless the modification requires changing it
 5. Keep the same light theme and design language (use CSS variable classes: bg-background, text-foreground, bg-card, bg-primary, etc.)
-6. Make ONLY the requested changes
-7. Do NOT modify protected files: src/main.jsx, src/index.css, vite.config.js, package.json, tailwind.config.js, postcss.config.js, index.html, src/components/ui/*, src/lib/*
-8. Update schema.json if capabilities, data shape, or actions changed. Every action must have {"params": {...}, "description": "..."} format
+6. Do NOT add app name headers, logos, or branding. These are mini utility apps — keep just the functionality.
+7. Make ONLY the requested changes
+8. Do NOT modify protected files: src/main.jsx, src/index.css, vite.config.js, package.json, tailwind.config.js, postcss.config.js, index.html, src/components/ui/*, src/lib/*
+9. Update schema.json if capabilities, data shape, or actions changed. Every action must have {"params": {...}, "description": "..."} format
 
 HOW DATA WORKS:
 main.jsx defines `window.__conjure` with:
