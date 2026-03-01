@@ -2,10 +2,12 @@ import asyncio
 import json
 import logging
 import uuid
+import aiosqlite
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from ..database import get_db
+from ..config import settings
 from ..services.mistral_client import MistralClientWrapper
 from ..services.app_service import AppService
 from ..services.generator import (
@@ -78,7 +80,7 @@ async def generate_app(request: GenerateRequest, db=Depends(get_db)):
 
         try:
             # Pass 1: Augment prompt
-            await queue.put({"type": "status", "message": "Expanding your idea..."})
+            await queue.put({"type": "status", "message": "Understanding what you need..."})
             augmented_prompt = await client.augment_prompt(
                 request.prompt, AUGMENTATION_SYSTEM_PROMPT
             )
@@ -100,17 +102,19 @@ async def generate_app(request: GenerateRequest, db=Depends(get_db)):
             # Fallback to golden template
             if not success:
                 logger.warning(f"Pipeline failed for {app_id}, falling back to golden template")
-                await queue.put({"type": "status", "message": "Using fallback template..."})
+                await queue.put({"type": "status", "message": "Grabbing a matching template..."})
                 best_golden = golden.pick_best_golden(request.prompt)
                 if best_golden:
                     app_name, theme_color, _ = golden.deploy_golden(best_golden, app_id)
                 else:
-                    await queue.put({"type": "error", "message": "Generation failed"})
+                    await queue.put({"type": "error", "message": "Couldn't build that one — try describing it differently"})
                     return
 
-            # Save to database
-            service = AppService(db)
-            await service.create_app(app_id, app_name, request.prompt, theme_color)
+            # Save to database with own connection (injected db closes with the SSE stream)
+            async with aiosqlite.connect(settings.DATABASE_PATH) as pipeline_db:
+                pipeline_db.row_factory = aiosqlite.Row
+                service = AppService(pipeline_db)
+                await service.create_app(app_id, app_name, request.prompt, theme_color)
 
             await queue.put({"type": "complete", "data": {
                 "id": app_id, "name": app_name,
@@ -118,7 +122,7 @@ async def generate_app(request: GenerateRequest, db=Depends(get_db)):
             }})
         except Exception as e:
             logger.error(f"Generate stream error: {e}")
-            await queue.put({"type": "error", "message": str(e)})
+            await queue.put({"type": "error", "message": "Something went wrong — try again"})
 
     async def event_stream():
         """SSE generator that reads from the queue while the pipeline runs."""
@@ -126,12 +130,12 @@ async def generate_app(request: GenerateRequest, db=Depends(get_db)):
         try:
             while True:
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=120)
+                    event = await asyncio.wait_for(queue.get(), timeout=300)
                     yield _sse_event(event)
                     if event["type"] in ("complete", "error"):
                         break
                 except asyncio.TimeoutError:
-                    yield _sse_event({"type": "error", "message": "Generation timed out"})
+                    yield _sse_event({"type": "error", "message": "Taking too long — try again with a simpler description"})
                     break
         finally:
             if not task.done():
@@ -157,7 +161,7 @@ async def iterate_app(request: IterateRequest, db=Depends(get_db)):
         client = MistralClientWrapper()
 
         try:
-            await queue.put({"type": "status", "message": "Understanding your request..."})
+            await queue.put({"type": "status", "message": "Looking at your app..."})
             augmented_instruction = await client.augment_prompt(
                 request.instruction, ITERATION_AUGMENTATION_SYSTEM_PROMPT
             )
@@ -170,14 +174,19 @@ async def iterate_app(request: IterateRequest, db=Depends(get_db)):
                 )
             except Exception as e:
                 logger.error(f"Iterate pipeline exception for {request.app_id}: {e}")
-                await queue.put({"type": "error", "message": f"Iteration failed: {e}"})
+                logger.error(f"Iterate pipeline exception detail: {e}")
+                await queue.put({"type": "error", "message": "Couldn't make that change — try rephrasing your request"})
                 return
 
             if not success:
-                await queue.put({"type": "error", "message": "Build failed after retries"})
+                await queue.put({"type": "error", "message": "That change was too tricky — try a smaller update"})
                 return
 
-            await service.update_theme(request.app_id, theme_color)
+            # Use own connection (injected db closes with the SSE stream)
+            async with aiosqlite.connect(settings.DATABASE_PATH) as pipeline_db:
+                pipeline_db.row_factory = aiosqlite.Row
+                pipeline_service = AppService(pipeline_db)
+                await pipeline_service.update_theme(request.app_id, theme_color)
 
             await queue.put({"type": "complete", "data": {
                 "id": request.app_id, "name": app["name"],
@@ -185,19 +194,19 @@ async def iterate_app(request: IterateRequest, db=Depends(get_db)):
             }})
         except Exception as e:
             logger.error(f"Iterate stream error: {e}")
-            await queue.put({"type": "error", "message": str(e)})
+            await queue.put({"type": "error", "message": "Something went wrong — try again"})
 
     async def event_stream():
         task = asyncio.create_task(run_pipeline())
         try:
             while True:
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=120)
+                    event = await asyncio.wait_for(queue.get(), timeout=300)
                     yield _sse_event(event)
                     if event["type"] in ("complete", "error"):
                         break
                 except asyncio.TimeoutError:
-                    yield _sse_event({"type": "error", "message": "Iteration timed out"})
+                    yield _sse_event({"type": "error", "message": "Taking too long — try a simpler change"})
                     break
         finally:
             if not task.done():

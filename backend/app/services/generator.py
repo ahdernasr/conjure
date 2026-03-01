@@ -213,7 +213,7 @@ RULES:
 2. Preserve the window.__conjure data contract (getData, setData)
 3. Preserve the localStorage key pattern
 4. Preserve the data structure unless the modification requires changing it
-5. Keep the same dark theme and design language (use CSS variable classes: bg-background, text-foreground, bg-card, bg-primary, etc.)
+5. Keep the same light theme and design language (use CSS variable classes: bg-background, text-foreground, bg-card, bg-primary, etc.)
 6. Make ONLY the requested changes
 7. Do NOT modify protected files: src/main.jsx, src/index.css, vite.config.js, package.json, tailwind.config.js, postcss.config.js, index.html, src/components/ui/*, src/lib/*
 8. Update schema.json if capabilities, data shape, or actions changed. Every action must have {"params": {...}, "description": "..."} format
@@ -498,16 +498,10 @@ def cleanup_build_dir(build_dir: str) -> None:
 
 
 def _tool_progress(on_status):
-    """Create an on_progress callback that translates tool calls into human-readable status messages."""
+    """Create an on_progress callback that suppresses per-file noise.
+    We only report high-level phase changes from the pipeline functions themselves."""
     async def callback(tool_name, args):
-        if tool_name == "write_file":
-            path = args.get("path", "file")
-            await on_status(f"Writing {path}")
-        elif tool_name == "read_file":
-            path = args.get("path", "file")
-            await on_status(f"Reading {path}")
-        elif tool_name == "list_files":
-            await on_status("Scanning project files...")
+        pass  # Intentionally silent — phase messages come from the pipeline
     return callback
 
 
@@ -524,30 +518,28 @@ async def generate_app_pipeline(client, prompt: str, app_id: str, app_name: str,
 
         # 2. Agentic generation
         if on_status:
-            await on_status("Writing code...")
+            await on_status("Crafting your app...")
         messages = await client.generate_app(prompt, build_dir, on_progress=on_status and _tool_progress(on_status))
 
-        # 3. Build with retries
+        # 3. Build with retries — keep going until it works
         theme_color = _extract_theme_from_build(build_dir)
-        for attempt in range(1 + settings.MAX_BUILD_RETRIES):
-            if on_status:
-                await on_status("Building app...")
+        if on_status:
+            await on_status("Putting it all together...")
+        for attempt in range(settings.MAX_BUILD_RETRIES + 1):
             success, output = await run_vite_build(build_dir)
             if success:
                 logger.info(f"Build succeeded for {app_id} (attempt {attempt + 1})")
                 break
             logger.warning(f"Build failed for {app_id} (attempt {attempt + 1}): {output}")
-            if attempt < settings.MAX_BUILD_RETRIES:
-                if on_status:
-                    await on_status("Fixing build errors...")
-                messages = await client.fix_build_error(output, build_dir, messages, on_progress=on_status and _tool_progress(on_status))
+            if on_status:
+                await on_status("Tweaking a few things...")
+            messages = await client.fix_build_error(output, build_dir, messages, on_progress=on_status and _tool_progress(on_status))
         else:
-            # All retries exhausted
             return False, "#6366f1"
 
         # 4. Deploy
         if on_status:
-            await on_status("Deploying...")
+            await on_status("Almost ready...")
         deploy_build(build_dir, app_id, app_name, theme_color)
         return True, theme_color
 
@@ -595,29 +587,28 @@ async def iterate_app_pipeline(client, instruction: str, app_id: str, app_name: 
 
         # 3. Agentic refinement
         if on_status:
-            await on_status("Writing code...")
+            await on_status("Making your changes...")
         messages = await client.refine_app(instruction, build_dir, on_progress=on_status and _tool_progress(on_status))
 
-        # 4. Build with retries
+        # 4. Build with retries — keep going until it works
         theme_color = _extract_theme_from_build(build_dir)
-        for attempt in range(1 + settings.MAX_BUILD_RETRIES):
-            if on_status:
-                await on_status("Building app...")
+        if on_status:
+            await on_status("Putting it all together...")
+        for attempt in range(settings.MAX_BUILD_RETRIES + 1):
             success, output = await run_vite_build(build_dir)
             if success:
                 logger.info(f"Iterate build succeeded for {app_id} (attempt {attempt + 1})")
                 break
             logger.warning(f"Iterate build failed for {app_id} (attempt {attempt + 1}): {output}")
-            if attempt < settings.MAX_BUILD_RETRIES:
-                if on_status:
-                    await on_status("Fixing build errors...")
-                messages = await client.fix_build_error(output, build_dir, messages, on_progress=on_status and _tool_progress(on_status))
+            if on_status:
+                await on_status("Tweaking a few things...")
+            messages = await client.fix_build_error(output, build_dir, messages, on_progress=on_status and _tool_progress(on_status))
         else:
             return False, "#6366f1"
 
         # 5. Deploy
         if on_status:
-            await on_status("Deploying...")
+            await on_status("Almost ready...")
         deploy_build(build_dir, app_id, app_name, theme_color)
         return True, theme_color
 
@@ -649,8 +640,8 @@ def _extract_theme_from_build(build_dir: str) -> str:
         match = re.search(r'(?:bg-\[|text-\[|border-\[)(#[0-9a-fA-F]{6})\]', content)
         if match:
             color = match.group(1).lower()
-            # Skip the default dark theme colors
-            if color not in ("#0a0a0a", "#141414", "#1a1a1a", "#e5e5e5", "#737373", "#a3a3a3", "#525252", "#404040"):
+            # Skip default theme colors (light and dark)
+            if color not in ("#0a0a0a", "#141414", "#1a1a1a", "#e5e5e5", "#737373", "#a3a3a3", "#525252", "#404040", "#ffffff", "#f5f5f5", "#fafafa", "#18181b", "#1c1c1e"):
                 return color
 
     return "#6366f1"
@@ -731,7 +722,7 @@ RULES:
 2. Preserve the window.__conjure contract (getData, setData, getSchema)
 3. Preserve the localStorage key
 4. Preserve the data structure unless the modification requires changing it
-5. Keep the same dark theme and design language
+5. Keep the same light theme and design language
 6. Make ONLY the requested changes
 7. The output must be a complete, working HTML file (not a diff or partial update)"""
 

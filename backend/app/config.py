@@ -11,8 +11,8 @@ class Settings(BaseSettings):
     DATABASE_PATH: str = "conjure.db"
     APPS_DIR: str = "apps"
     TEMPLATE_DIR: str = "app/template"
-    MAX_BUILD_RETRIES: int = 2
-    BUILD_TIMEOUT: int = 60
+    MAX_BUILD_RETRIES: int = 10
+    BUILD_TIMEOUT: int = 120
 
     # Model assignments
     DEVSTRAL_MODEL: str = "devstral-2512"            # Generator + Refiner (agentic coding)
