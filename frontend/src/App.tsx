@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, ArrowRight, AlertCircle, Mic, Loader2, Timer, ListChecks, Trophy } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUp, AlertCircle, Mic, Loader2, Timer, ListChecks, Trophy } from "lucide-react";
 import AppGallery from "@/components/AppGallery";
 import ChatInput from "@/components/ChatInput";
 import InstallPrompt from "@/components/InstallPrompt";
@@ -38,11 +38,12 @@ export default function App() {
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [showInstall, setShowInstall] = useState(false);
   const [installAppName, setInstallAppName] = useState("App");
+  const [heroInput, setHeroInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Voice for home hero mic
+  // Voice for home hero mic — feed transcription into the input field
   const handleVoiceTranscription = useCallback((text: string) => {
-    cmdSend(text);
+    setHeroInput((prev) => (prev ? `${prev} ${text}` : text));
   }, [cmdSend]);
 
   const { voiceState, error: voiceError, toggleRecording } = useVoice(handleVoiceTranscription);
@@ -192,76 +193,133 @@ export default function App() {
 
           {/* Center content */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto flex flex-col">
-            {hasConversation ? (
-              /* Conversation mode */
-              <div className="flex-1 px-6 py-4 space-y-3">
-                {cmdMessages.map((msg: CommandMessage, i: number) => (
-                  <div
-                    key={msg.id}
-                    className={`flex animate-fade-in-up ${
-                      msg.role === "user" ? "justify-end" : "justify-start"
-                    }`}
-                    style={{ animationDelay: `${i * 0.03}s` }}
-                  >
-                    <div
-                      className={`rounded-2xl px-4 py-2.5 max-w-[80%] text-sm leading-relaxed ${
-                        msg.role === "user"
-                          ? "bg-foreground text-background"
-                          : "bg-secondary text-foreground"
-                      }`}
-                    >
-                      {msg.content}
-                    </div>
-                  </div>
-                ))}
-                {cmdLoading && (
-                  <div className="flex justify-start animate-fade-in-up">
-                    <div className="bg-secondary rounded-2xl px-4 py-2.5">
-                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
+            {!hasConversation ? (
               /* Hero mode */
               <div className="flex-1 flex flex-col items-center justify-center px-6 pb-4">
-                <p className="text-xl font-medium text-foreground mb-1">
+                <p className="text-2xl font-semibold text-foreground mb-2 tracking-tight">
                   What do you want to build?
                 </p>
-                <p className="text-sm text-muted-foreground mb-10">
-                  Tap to speak or type below
+                <p className="text-sm text-muted-foreground mb-8">
+                  Describe an app and we'll create it instantly
                 </p>
 
-                {/* Hero mic button */}
-                <button
-                  onClick={toggleRecording}
-                  disabled={isTranscribing}
-                  className={`relative w-20 h-20 rounded-full flex items-center justify-center transition-all duration-200 mb-3 ${
-                    isRecording
-                      ? "bg-red-50 text-red-600"
-                      : "bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
-                  } disabled:opacity-50`}
-                >
-                  {isTranscribing ? (
-                    <Loader2 className="w-8 h-8 animate-spin" />
-                  ) : (
-                    <Mic className="w-8 h-8" />
-                  )}
-                  {isRecording && (
-                    <span className="absolute inset-0 rounded-full border-2 border-red-300 animate-ping pointer-events-none" />
-                  )}
-                </button>
+                {/* Aurora Mic Orb */}
+                <div className="relative flex items-center justify-center mb-1" style={{ width: 160, height: 160 }}>
+                  {/* Glow wrapper — breathes on idle, pulses on record */}
+                  <div
+                    className="absolute inset-0"
+                    style={{
+                      animation: isRecording
+                        ? 'aurora-pulse 1.5s ease-in-out infinite'
+                        : 'aurora-breathe 4s ease-in-out infinite',
+                    }}
+                  >
+                    {/* Layer 1 — indigo/sky conic gradient */}
+                    <div
+                      className={`absolute inset-0 rounded-full transition-opacity duration-700 ${
+                        isRecording ? 'opacity-70' : 'opacity-30'
+                      }`}
+                      style={{
+                        background: 'conic-gradient(from 0deg, #818cf8, #38bdf8, #818cf8)',
+                        filter: 'blur(30px)',
+                        animation: `aurora-spin ${isRecording ? '3s' : '8s'} linear infinite`,
+                      }}
+                    />
+                    {/* Layer 2 — purple/teal counter-rotate */}
+                    <div
+                      className={`absolute rounded-full transition-opacity duration-700 ${
+                        isRecording ? 'opacity-60' : 'opacity-20'
+                      }`}
+                      style={{
+                        inset: '10px',
+                        background: 'conic-gradient(from 180deg, #c084fc, #2dd4bf, #c084fc)',
+                        filter: 'blur(25px)',
+                        animation: `aurora-spin ${isRecording ? '2.5s' : '6s'} linear infinite reverse`,
+                      }}
+                    />
+                    {/* Layer 3 — warm accent, fades in when recording */}
+                    <div
+                      className={`absolute rounded-full transition-opacity duration-700 ${
+                        isRecording ? 'opacity-50' : 'opacity-0'
+                      }`}
+                      style={{
+                        inset: '5px',
+                        background: 'conic-gradient(from 90deg, #fb7185, #f472b6, #fb7185)',
+                        filter: 'blur(28px)',
+                        animation: 'aurora-spin 2s linear infinite',
+                      }}
+                    />
+                  </div>
 
-                <p className="text-xs text-muted-foreground mb-10">
-                  {isRecording ? "Listening..." : isTranscribing ? "Transcribing..." : "Tap to speak"}
+                  {/* Mic button */}
+                  <button
+                    onClick={toggleRecording}
+                    disabled={isTranscribing || cmdLoading}
+                    className={`relative z-10 w-[72px] h-[72px] rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${
+                      isRecording
+                        ? 'bg-foreground text-background scale-110'
+                        : isTranscribing
+                        ? 'bg-foreground/80 text-background'
+                        : 'bg-foreground text-background hover:scale-105 active:scale-95'
+                    } disabled:opacity-60`}
+                  >
+                    {isTranscribing ? (
+                      <Loader2 className="w-7 h-7 animate-spin" />
+                    ) : (
+                      <Mic className="w-7 h-7" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Mic status label */}
+                <p className={`text-xs mb-5 transition-colors duration-300 ${
+                  isRecording ? 'text-foreground font-medium' : 'text-muted-foreground'
+                }`}>
+                  {isRecording ? 'Listening...' : isTranscribing ? 'Transcribing...' : 'Tap to speak'}
                 </p>
 
                 {voiceError && (
-                  <p className="text-xs text-destructive mb-6">{voiceError}</p>
+                  <p className="text-xs text-destructive mb-3 px-1">{voiceError}</p>
                 )}
 
+                {/* Text input bar */}
+                <div className="w-full max-w-lg mb-8">
+                  <div className="flex items-center gap-2 h-12 px-4 rounded-xl border border-border bg-background focus-within:border-foreground/20 transition-all duration-200">
+                    <input
+                      type="text"
+                      value={heroInput}
+                      onChange={(e) => setHeroInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && heroInput.trim() && !cmdLoading) {
+                          handleSuggest(heroInput.trim());
+                          setHeroInput("");
+                        }
+                      }}
+                      placeholder="or type your idea..."
+                      disabled={cmdLoading}
+                      className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none disabled:opacity-50"
+                    />
+                    <button
+                      onClick={() => {
+                        if (heroInput.trim()) {
+                          handleSuggest(heroInput.trim());
+                          setHeroInput("");
+                        }
+                      }}
+                      disabled={cmdLoading || !heroInput.trim()}
+                      className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-150 ${
+                        heroInput.trim() && !cmdLoading
+                          ? "bg-foreground text-background"
+                          : "bg-secondary text-muted-foreground"
+                      } disabled:opacity-40`}
+                    >
+                      <ArrowUp className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
                 {/* Suggestion chips */}
-                <div className="flex flex-col gap-2 w-full max-w-sm">
+                <div className="flex flex-col gap-2 w-full max-w-lg">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                     Try saying
                   </p>
@@ -282,18 +340,52 @@ export default function App() {
                   ))}
                 </div>
               </div>
+            ) : (
+              /* Conversation mode */
+              <>
+                <div className="flex-1 px-6 py-4 space-y-3">
+                  {cmdMessages.map((msg: CommandMessage, i: number) => (
+                    <div
+                      key={msg.id}
+                      className={`flex animate-fade-in-up ${
+                        msg.role === "user" ? "justify-end" : "justify-start"
+                      }`}
+                      style={{ animationDelay: `${i * 0.03}s` }}
+                    >
+                      <div
+                        className={`rounded-2xl px-4 py-2.5 max-w-[80%] text-sm leading-relaxed ${
+                          msg.role === "user"
+                            ? "bg-foreground text-background"
+                            : "bg-secondary text-foreground"
+                        }`}
+                      >
+                        {msg.content}
+                      </div>
+                    </div>
+                  ))}
+                  {cmdLoading && (
+                    <div className="flex justify-start animate-fade-in-up">
+                      <div className="bg-secondary rounded-2xl px-4 py-2.5">
+                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
             )}
           </div>
 
-          {/* Bottom input */}
-          <div className="sticky bottom-0 bg-background border-t border-border px-6 py-3">
-            <ChatInput
-              onSend={cmdSend}
-              loading={cmdLoading}
-              placeholder={hasConversation ? "Ask about your apps..." : "Or type here..."}
-              showMic={false}
-            />
-          </div>
+          {/* Bottom input — only in conversation mode */}
+          {hasConversation && (
+            <div className="shrink-0 bg-background border-t border-border px-6 py-3">
+              <ChatInput
+                onSend={cmdSend}
+                loading={cmdLoading}
+                placeholder="Ask about your apps..."
+                showMic={false}
+              />
+            </div>
+          )}
         </>
       )}
 
