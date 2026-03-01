@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import type { App } from "../types/app";
-import { iterateApp } from "../api/generate";
-import PhonePreview from "./PhonePreview";
-import ChatInput from "./ChatInput";
-import ThinkingTrace from "./ThinkingTrace";
+import { ArrowLeft, ExternalLink, Download, AlertCircle, Loader2 } from "lucide-react";
+import type { App } from "@/types/app";
+import { iterateApp } from "@/api/generate";
+import PhonePreview from "@/components/PhonePreview";
+import ChatInput from "@/components/ChatInput";
+import ThinkingTrace from "@/components/ThinkingTrace";
+import { Button } from "@/components/ui/button";
 
 interface ChatMessage {
   id: number;
@@ -76,78 +78,101 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
     setIframeKey((prev) => prev + 1);
   };
 
-  // Build version pills array
   const versions = Array.from({ length: version }, (_, i) => i + 1);
+  const color = app.theme_color || "#6366f1";
 
   return (
     <div className="flex flex-col min-h-[100dvh]">
       {/* Header */}
-      <header className="flex items-center gap-3 px-4 py-3 border-b border-conjure-border">
-        <button
+      <header className="flex items-center gap-3 px-6 py-3 border-b border-border">
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={onBack}
-          className="text-conjure-muted text-sm min-w-[44px] min-h-[44px] flex items-center"
+          className="shrink-0 rounded-full w-8 h-8"
         >
-          &larr; Back
-        </button>
-        <h1 className="text-lg font-semibold truncate">{app.name}</h1>
+          <ArrowLeft className="w-4 h-4" />
+        </Button>
+
+        {/* App identity */}
+        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold shrink-0"
+            style={{ backgroundColor: color }}
+          >
+            {app.name.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-sm font-semibold truncate">{app.name}</h1>
+            <p className="text-[11px] text-muted-foreground">
+              v{activeVersion} {isIterating ? "— Updating..." : "— Ready"}
+            </p>
+          </div>
+        </div>
+
+        {/* Quick actions */}
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleOpen}
+            className="rounded-full w-8 h-8"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onInstall(app.name)}
+            className="rounded-full w-8 h-8"
+          >
+            <Download className="w-4 h-4" />
+          </Button>
+        </div>
       </header>
 
       {/* Pinned preview section */}
-      <div className="border-b border-conjure-border px-4 py-4 space-y-3">
+      <div className="px-6 py-5 border-b border-border">
         <PhonePreview appId={app.id} iframeKey={iframeKey} />
 
         {/* Version pills */}
-        <div className="flex items-center justify-center gap-2 flex-wrap">
-          {versions.map((v) => (
-            <button
-              key={v}
-              onClick={() => handleVersionTap(v)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                v === activeVersion
-                  ? "bg-conjure-accent text-white"
-                  : "bg-conjure-card border border-conjure-border text-conjure-muted"
-              }`}
-            >
-              v{v}
-            </button>
-          ))}
-        </div>
-
-        {/* Action buttons */}
-        <div className="flex gap-2 justify-center">
-          <button
-            onClick={handleOpen}
-            className="px-4 py-2 rounded-lg bg-conjure-accent text-white text-sm font-medium
-                       active:scale-95 transition-transform"
-          >
-            Open App
-          </button>
-          <button
-            onClick={() => onInstall(app.name)}
-            className="px-4 py-2 rounded-lg bg-conjure-card border border-conjure-border
-                       text-conjure-text text-sm font-medium
-                       active:scale-95 transition-transform"
-          >
-            Install
-          </button>
-        </div>
+        {versions.length > 1 && (
+          <div className="flex items-center justify-center gap-1.5 mt-4">
+            {versions.map((v) => (
+              <button
+                key={v}
+                onClick={() => handleVersionTap(v)}
+                className={`flex items-center justify-center transition-all duration-200 ${
+                  v === activeVersion
+                    ? "w-8 h-8 rounded-full bg-foreground text-background text-xs font-bold"
+                    : "w-6 h-6 rounded-full bg-secondary text-muted-foreground text-[10px] hover:bg-secondary/80"
+                }`}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Scrollable conversation */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-4 space-y-3"
+        className="flex-1 overflow-y-auto px-6 py-4 space-y-3"
       >
-        {messages.map((msg) => (
+        {messages.map((msg, i) => (
           <div
             key={msg.id}
-            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+            className={`flex animate-fade-in-up ${
+              msg.role === "user" ? "justify-end" : "justify-start"
+            }`}
+            style={{ animationDelay: `${i * 0.03}s` }}
           >
             <div
-              className={`rounded-xl px-4 py-2 max-w-[80%] text-sm ${
+              className={`rounded-2xl px-4 py-2.5 max-w-[80%] text-sm leading-relaxed ${
                 msg.role === "user"
-                  ? "bg-conjure-accent/20 border border-conjure-accent/30 text-conjure-text"
-                  : "bg-conjure-card border border-conjure-border text-conjure-muted"
+                  ? "bg-foreground text-background"
+                  : "bg-secondary text-foreground"
               }`}
             >
               {msg.content}
@@ -162,19 +187,19 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
 
         {/* Error */}
         {error && (
-          <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-3">
-            <p className="text-sm text-red-400">{error}</p>
+          <div className="flex items-center gap-2 text-sm text-destructive animate-fade-in-up">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <p>{error}</p>
           </div>
         )}
       </div>
 
       {/* Sticky bottom input */}
-      <div className="sticky bottom-0 border-t border-conjure-border bg-conjure-bg px-4 py-3">
+      <div className="sticky bottom-0 bg-background border-t border-border px-6 py-3">
         <ChatInput
           onSend={handleSend}
           loading={isIterating}
           placeholder="Describe a change..."
-          buttonText="Send"
         />
       </div>
     </div>

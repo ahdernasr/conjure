@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from "react";
-import { transcribeAudio } from "../api/voice";
+import { transcribeAudio } from "@/api/voice";
 
 export type VoiceState = "idle" | "recording" | "transcribing";
 

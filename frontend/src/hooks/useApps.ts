@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { listApps } from "../api/apps";
-import type { App } from "../types/app";
+import { listApps } from "@/api/apps";
+import type { App } from "@/types/app";
 
 export function useApps() {
   const [apps, setApps] = useState<App[]>([]);

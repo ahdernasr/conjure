@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
-import { sendCommand } from "../api/command";
-import { textToSpeech } from "../api/voice";
+import { sendCommand } from "@/api/command";
+import { textToSpeech } from "@/api/voice";
 
 export interface CommandMessage {
   id: string;

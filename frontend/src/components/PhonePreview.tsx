@@ -3,31 +3,39 @@ interface Props {
   iframeKey?: number;
 }
 
-const PHONE_WIDTH = 280;
-const IFRAME_WIDTH = 390; // real iPhone viewport width
+const PHONE_WIDTH = 300;
+const IFRAME_WIDTH = 390;
 const SCALE = PHONE_WIDTH / IFRAME_WIDTH;
+
+// Simulate real iPhone bezels — app content starts below status bar, ends above home indicator
+const TOP_BEZEL = 44; // status bar + dynamic island safe area
+const BOTTOM_BEZEL = 28; // home indicator area
 
 export default function PhonePreview({ appId, iframeKey = 0 }: Props) {
   return (
     <div className="mx-auto" style={{ maxWidth: `${PHONE_WIDTH}px` }}>
       <div
-        className="relative rounded-[2rem] border-[3px] border-white/10 bg-black overflow-hidden"
+        className="relative rounded-[2.5rem] border border-border bg-white shadow-sm"
         style={{ aspectRatio: "9 / 19.5" }}
       >
-        {/* Notch */}
-        <div className="h-6 bg-black flex items-center justify-center">
-          <div className="w-16 h-4 bg-conjure-card rounded-b-xl" />
-        </div>
+        {/* Dynamic Island */}
+        <div className="absolute top-2.5 left-1/2 -translate-x-1/2 w-[90px] h-[26px] bg-black rounded-full z-20" />
 
-        {/* App iframe — rendered at real mobile size, scaled down to fit */}
-        <div className="overflow-hidden" style={{ height: "calc(100% - 1.5rem)" }}>
+        {/* App iframe — inset to reflect real safe area */}
+        <div
+          className="absolute left-0 right-0 overflow-hidden"
+          style={{
+            top: `${TOP_BEZEL}px`,
+            bottom: `${BOTTOM_BEZEL}px`,
+          }}
+        >
           <iframe
             key={iframeKey}
             src={`/apps/${appId}/`}
             className="border-0"
             style={{
               width: `${IFRAME_WIDTH}px`,
-              height: `${100 / SCALE}%`,
+              height: `${Math.round(100 / SCALE)}%`,
               transform: `scale(${SCALE})`,
               transformOrigin: "top left",
             }}
@@ -36,6 +44,9 @@ export default function PhonePreview({ appId, iframeKey = 0 }: Props) {
             scrolling="no"
           />
         </div>
+
+        {/* Home indicator */}
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 w-[100px] h-1 bg-black/15 rounded-full z-20" />
       </div>
     </div>
   );

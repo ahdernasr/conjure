@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { generateApp, iterateApp } from "../api/generate";
+import { generateApp, iterateApp } from "@/api/generate";
 
 type Status = "idle" | "generating" | "done" | "error";
 

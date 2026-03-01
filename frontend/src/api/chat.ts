@@ -1,5 +1,5 @@
 import { apiRequest } from "./client";
-import type { ChatResponseData } from "../types/chat";
+import type { ChatResponseData } from "@/types/chat";
 
 export async function sendChatMessage(
   message: string

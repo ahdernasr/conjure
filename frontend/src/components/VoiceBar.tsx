@@ -9,7 +9,7 @@
 export default function VoiceBar() {
   return (
     <div className="flex items-center justify-center py-1">
-      <span className="text-xs text-conjure-muted">
+      <span className="text-xs text-muted-foreground">
         {/* Phase 4: Voice input will appear here */}
       </span>
     </div>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { sendChatMessage } from "../api/chat";
+import { sendChatMessage } from "@/api/chat";
 
 export function useChat() {
   const [response, setResponse] = useState<string | null>(null);

@@ -23,14 +23,32 @@ PROJECT STRUCTURE (already set up for you):
 ```
 index.html          — root HTML (DO NOT MODIFY)
 vite.config.js      — Vite config (DO NOT MODIFY)
-tailwind.config.js  — Tailwind config (DO NOT MODIFY)
+tailwind.config.js  — Tailwind config with shadcn theme (DO NOT MODIFY)
 postcss.config.js   — PostCSS config (DO NOT MODIFY)
 package.json        — dependencies (DO NOT MODIFY)
 src/
   main.jsx          — entry point with conjure contract (DO NOT MODIFY)
-  index.css         — Tailwind directives + dark base (DO NOT MODIFY)
+  index.css         — Tailwind directives + CSS variables (DO NOT MODIFY)
   App.jsx           — YOUR MAIN COMPONENT (overwrite this)
+  lib/
+    utils.js        — cn() utility (DO NOT MODIFY)
+  components/ui/    — Pre-built shadcn components (DO NOT MODIFY)
+    button.jsx      — Button (variant: default|destructive|outline|secondary|ghost|link, size: default|sm|lg|icon)
+    card.jsx        — Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter
+    badge.jsx       — Badge (variant: default|secondary|destructive|outline)
+    input.jsx       — Input
+    progress.jsx    — Progress (value: 0-100)
+    tabs.jsx        — Tabs, TabsList, TabsTrigger, TabsContent
+    separator.jsx   — Separator (orientation: horizontal|vertical)
+    switch.jsx      — Switch (checked, onCheckedChange)
+    dialog.jsx      — Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 ```
+
+AVAILABLE IMPORTS (use ONLY these — no other external packages):
+- react, react-dom
+- lucide-react (icons: e.g. Plus, Trash2, Check, X, ChevronRight, ArrowLeft, Loader2, etc.)
+- Components from ./components/ui/ (e.g. import { Button } from "./components/ui/button")
+- cn() from ./lib/utils (e.g. import { cn } from "./lib/utils")
 
 HOW DATA WORKS:
 main.jsx defines `window.__conjure` with:
@@ -62,18 +80,37 @@ WHAT YOU MUST DO:
 
    Every user-facing operation MUST be an action. Include read actions (get_X) and write actions (add_X, remove_X, update_X, toggle_X). Each param must have a type: "string", "number", "boolean". Actions with no params use an empty object {}.
 3. You may create additional component files in `src/` (e.g. `src/Timer.jsx`, `src/utils.js`)
-4. Do NOT import external packages — only use React, react-dom, and Tailwind CSS classes
 
 DESIGN RULES:
-- Dark theme: bg-[#0a0a0a] for body, bg-[#141414] for cards, text-[#e5e5e5] for text
-- Choose an accent color that fits the app (e.g. red for fitness, green for money, blue for productivity)
+- Use CSS variable classes: bg-background, text-foreground, bg-card, text-card-foreground, bg-primary, text-primary-foreground, bg-secondary, text-secondary-foreground, text-muted-foreground, bg-muted, border-border, bg-destructive
+- Do NOT use hardcoded hex colors. Use the CSS variable classes above.
+- To set a custom accent color, override --primary in a <style> tag: :root { --primary: 142 71% 45%; } (HSL values without commas)
 - Mobile-first: min tap targets 44px (min-h-[44px] min-w-[44px]), responsive layouts
-- Rounded corners: rounded-xl for cards, rounded-lg for buttons
-- Subtle borders: border border-white/[0.06]
-- Font: system font stack (inherited from index.css)
+- Use shadcn components: Button for actions, Card for containers, Badge for status, Input for text fields, Progress for bars, Tabs for sections, Switch for toggles, Dialog for modals
 - Numbers/stats: text-2xl font-bold tabular-nums
 - Transitions: transition-transform duration-150, active:scale-[0.97] on buttons
 - Full viewport height: min-h-dvh on root container
+
+COMPONENT USAGE EXAMPLES:
+```jsx
+import { Button } from "./components/ui/button"
+import { Card, CardHeader, CardTitle, CardContent } from "./components/ui/card"
+import { Badge } from "./components/ui/badge"
+import { Input } from "./components/ui/input"
+import { Progress } from "./components/ui/progress"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "./components/ui/tabs"
+import { Switch } from "./components/ui/switch"
+import { Separator } from "./components/ui/separator"
+import { cn } from "./lib/utils"
+import { Plus, Trash2, Check } from "lucide-react"
+
+<Button variant="outline" size="sm" onClick={handleClick}><Plus className="w-4 h-4 mr-2" />Add</Button>
+<Card><CardHeader><CardTitle>Title</CardTitle></CardHeader><CardContent>...</CardContent></Card>
+<Badge variant="secondary">Active</Badge>
+<Input placeholder="Enter value..." value={val} onChange={e => setVal(e.target.value)} />
+<Progress value={75} />
+<Switch checked={on} onCheckedChange={setOn} />
+```
 
 INTERACTIVITY:
 - App MUST be fully functional, not a mockup
@@ -116,8 +153,9 @@ EDGE CASES:
 
 UI LAYOUT:
 - Describe the visual layout section by section (header, main area, controls, etc.)
-- Specify an accent color as a hex code that fits the app's purpose
-- Format: "Accent color: #hexcode"
+- Specify an accent color as HSL values (e.g. "142 71% 45%" for green) that fits the app's purpose
+- Format: "Accent color: H S% L%"
+- Reference available shadcn components: Button, Card, Badge, Input, Progress, Tabs, Switch, Separator, Dialog
 
 SCHEMA:
 - capabilities: list of capability strings
@@ -161,14 +199,23 @@ WORKFLOW:
 2. Use `read_file` to read the existing files you need to understand
 3. Use `write_file` to make your changes
 
+AVAILABLE SHADCN COMPONENTS (pre-installed, import from ./components/ui/):
+- Button (variant: default|destructive|outline|secondary|ghost|link, size: default|sm|lg|icon)
+- Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter
+- Badge (variant: default|secondary|destructive|outline)
+- Input, Progress, Tabs, TabsList, TabsTrigger, TabsContent
+- Separator, Switch, Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
+
+AVAILABLE IMPORTS: react, react-dom, lucide-react, components from ./components/ui/, cn() from ./lib/utils
+
 RULES:
 1. Preserve ALL existing functionality unless the user specifically asks to change it
 2. Preserve the window.__conjure data contract (getData, setData)
 3. Preserve the localStorage key pattern
 4. Preserve the data structure unless the modification requires changing it
-5. Keep the same dark theme and design language
+5. Keep the same dark theme and design language (use CSS variable classes: bg-background, text-foreground, bg-card, bg-primary, etc.)
 6. Make ONLY the requested changes
-7. Do NOT modify protected files: src/main.jsx, src/index.css, vite.config.js, package.json, tailwind.config.js, postcss.config.js, index.html
+7. Do NOT modify protected files: src/main.jsx, src/index.css, vite.config.js, package.json, tailwind.config.js, postcss.config.js, index.html, src/components/ui/*, src/lib/*
 8. Update schema.json if capabilities, data shape, or actions changed. Every action must have {"params": {...}, "description": "..."} format
 
 HOW DATA WORKS:
@@ -245,6 +292,9 @@ PROTECTED_FILES = {
     "index.html",
 }
 
+# Protected path prefixes (pre-built UI components and utilities)
+PROTECTED_PREFIXES = ("src/components/ui/", "src/lib/")
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Tool executor
 # ─────────────────────────────────────────────────────────────────────────────
@@ -271,7 +321,7 @@ def create_tool_executor(build_dir: str):
             # Normalize path separators
             rel_path = rel_path.replace("\\", "/")
             # Check protected
-            if rel_path in PROTECTED_FILES:
+            if rel_path in PROTECTED_FILES or rel_path.startswith(PROTECTED_PREFIXES):
                 return f"Error: '{rel_path}' is a protected file and cannot be modified."
             try:
                 full_path = _validate_path(rel_path)

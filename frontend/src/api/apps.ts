@@ -1,5 +1,5 @@
 import { apiRequest } from "./client";
-import type { AppListResponse, App } from "../types/app";
+import type { AppListResponse, App } from "@/types/app";
 
 export async function listApps(): Promise<AppListResponse> {
   return apiRequest<AppListResponse>("/apps/");
