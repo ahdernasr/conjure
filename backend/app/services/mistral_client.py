@@ -64,9 +64,12 @@ class MistralClientWrapper:
         user_message: str,
         build_dir: str,
         max_turns: int = 25,
+        on_progress=None,
     ) -> list[dict]:
         """Run Devstral in agentic mode with tool calls.
 
+        Args:
+            on_progress: Optional async callback(tool_name, args) called after each tool execution.
         Returns the full message history for potential follow-up (e.g. build error fixes).
         """
         tool_executor = create_tool_executor(build_dir)
@@ -123,6 +126,9 @@ class MistralClientWrapper:
                 logger.info(f"Tool call: {tool_name}({list(args.keys())})")
                 result = tool_executor(tool_name, args)
 
+                if on_progress:
+                    await on_progress(tool_name, args)
+
                 # Truncate very long results to avoid context overflow
                 if len(result) > 10000:
                     result = result[:10000] + "\n... (truncated)"
@@ -140,24 +146,26 @@ class MistralClientWrapper:
 
     # -- Generator Agent (Agentic) ---------------------------------------------
 
-    async def generate_app(self, prompt: str, build_dir: str) -> list[dict]:
+    async def generate_app(self, prompt: str, build_dir: str, on_progress=None) -> list[dict]:
         """Run agentic generation loop. Returns message history."""
         user_message = f"Create the following app according to this specification:\n\n{prompt}"
         return await self.run_agentic_loop(
             AGENTIC_GENERATOR_SYSTEM_PROMPT,
             user_message,
             build_dir,
+            on_progress=on_progress,
         )
 
     # -- Refiner Agent (Agentic) -----------------------------------------------
 
-    async def refine_app(self, instruction: str, build_dir: str) -> list[dict]:
+    async def refine_app(self, instruction: str, build_dir: str, on_progress=None) -> list[dict]:
         """Run agentic refinement loop. Returns message history."""
         user_message = f"Modify the existing app according to this specification:\n\n{instruction}"
         return await self.run_agentic_loop(
             AGENTIC_REFINER_SYSTEM_PROMPT,
             user_message,
             build_dir,
+            on_progress=on_progress,
         )
 
     # -- Build Error Fix -------------------------------------------------------
@@ -167,6 +175,7 @@ class MistralClientWrapper:
         error_output: str,
         build_dir: str,
         messages: list[dict],
+        on_progress=None,
     ) -> list[dict]:
         """Append build error as user message and continue the agentic loop."""
         tool_executor = create_tool_executor(build_dir)
@@ -218,6 +227,10 @@ class MistralClientWrapper:
                     args = {}
 
                 result = tool_executor(tool_name, args)
+
+                if on_progress:
+                    await on_progress(tool_name, args)
+
                 if len(result) > 10000:
                     result = result[:10000] + "\n... (truncated)"
 

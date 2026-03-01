@@ -1,12 +1,13 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import type { App } from "../types/app";
 import { iterateApp } from "../api/generate";
 import PhonePreview from "./PhonePreview";
 import ChatInput from "./ChatInput";
+import ThinkingTrace from "./ThinkingTrace";
 
-interface ChatEntry {
+interface ChatMessage {
   id: number;
-  role: "user" | "preview";
+  role: "user" | "assistant";
   content: string;
 }
 
@@ -17,21 +18,26 @@ interface Props {
 }
 
 export default function ProjectChat({ app, onBack, onInstall }: Props) {
-  const [messages, setMessages] = useState<ChatEntry[]>([
-    { id: 0, role: "preview", content: "" },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isIterating, setIsIterating] = useState(false);
+  const [traceMessages, setTraceMessages] = useState<string[]>([]);
   const [iframeKey, setIframeKey] = useState(0);
+  const [version, setVersion] = useState(1);
+  const [activeVersion, setActiveVersion] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const nextId = useRef(1);
+  const nextId = useRef(0);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
       top: scrollRef.current.scrollHeight,
       behavior: "smooth",
     });
-  }, [messages, isIterating]);
+  }, [messages, isIterating, traceMessages]);
+
+  const onTrace = useCallback((message: string) => {
+    setTraceMessages((prev) => [...prev, message]);
+  }, []);
 
   const handleSend = async (instruction: string) => {
     const userId = nextId.current++;
@@ -41,31 +47,37 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
     ]);
 
     setIsIterating(true);
+    setTraceMessages([]);
     setError(null);
     try {
-      await iterateApp(app.id, instruction);
+      await iterateApp(app.id, instruction, onTrace);
+      const newVersion = version + 1;
+      setVersion(newVersion);
+      setActiveVersion(newVersion);
       setIframeKey((prev) => prev + 1);
-      const previewId = nextId.current++;
+
+      const confirmId = nextId.current++;
       setMessages((prev) => [
         ...prev,
-        { id: previewId, role: "preview", content: "" },
+        { id: confirmId, role: "assistant", content: `Updated! (v${newVersion})` },
       ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Iteration failed");
     } finally {
       setIsIterating(false);
+      setTraceMessages([]);
     }
   };
 
   const handleOpen = () => window.open(`/apps/${app.id}/`, "_blank");
 
-  // Find the last preview message index so we only render one live iframe
-  const lastPreviewId = (() => {
-    for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].role === "preview") return messages[i].id;
-    }
-    return -1;
-  })();
+  const handleVersionTap = (v: number) => {
+    setActiveVersion(v);
+    setIframeKey((prev) => prev + 1);
+  };
+
+  // Build version pills array
+  const versions = Array.from({ length: version }, (_, i) => i + 1);
 
   return (
     <div className="flex flex-col min-h-[100dvh]">
@@ -80,60 +92,72 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
         <h1 className="text-lg font-semibold truncate">{app.name}</h1>
       </header>
 
-      {/* Scrollable chat area */}
+      {/* Pinned preview section */}
+      <div className="border-b border-conjure-border px-4 py-4 space-y-3">
+        <PhonePreview appId={app.id} iframeKey={iframeKey} />
+
+        {/* Version pills */}
+        <div className="flex items-center justify-center gap-2 flex-wrap">
+          {versions.map((v) => (
+            <button
+              key={v}
+              onClick={() => handleVersionTap(v)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                v === activeVersion
+                  ? "bg-conjure-accent text-white"
+                  : "bg-conjure-card border border-conjure-border text-conjure-muted"
+              }`}
+            >
+              v{v}
+            </button>
+          ))}
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex gap-2 justify-center">
+          <button
+            onClick={handleOpen}
+            className="px-4 py-2 rounded-lg bg-conjure-accent text-white text-sm font-medium
+                       active:scale-95 transition-transform"
+          >
+            Open App
+          </button>
+          <button
+            onClick={() => onInstall(app.name)}
+            className="px-4 py-2 rounded-lg bg-conjure-card border border-conjure-border
+                       text-conjure-text text-sm font-medium
+                       active:scale-95 transition-transform"
+          >
+            Install
+          </button>
+        </div>
+      </div>
+
+      {/* Scrollable conversation */}
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
+        className="flex-1 overflow-y-auto px-4 py-4 space-y-3"
       >
-        {messages.map((msg) =>
-          msg.role === "user" ? (
-            <div key={msg.id} className="flex justify-end">
-              <div
-                className="bg-conjure-accent/20 border border-conjure-accent/30
-                            rounded-xl px-4 py-2 max-w-[80%]"
-              >
-                <p className="text-sm">{msg.content}</p>
-              </div>
-            </div>
-          ) : msg.id === lastPreviewId ? (
-            <div key={msg.id} className="space-y-3">
-              <PhonePreview appId={app.id} iframeKey={iframeKey} />
-              <div className="flex gap-2 justify-center">
-                <button
-                  onClick={handleOpen}
-                  className="px-4 py-2 rounded-lg bg-conjure-accent text-white text-sm font-medium
-                             active:scale-95 transition-transform"
-                >
-                  Open App
-                </button>
-                <button
-                  onClick={() => onInstall(app.name)}
-                  className="px-4 py-2 rounded-lg bg-conjure-card border border-conjure-border
-                             text-conjure-text text-sm font-medium
-                             active:scale-95 transition-transform"
-                >
-                  Install
-                </button>
-              </div>
-            </div>
-          ) : (
+        {messages.map((msg) => (
+          <div
+            key={msg.id}
+            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+          >
             <div
-              key={msg.id}
-              className="text-center text-xs text-conjure-muted py-2"
+              className={`rounded-xl px-4 py-2 max-w-[80%] text-sm ${
+                msg.role === "user"
+                  ? "bg-conjure-accent/20 border border-conjure-accent/30 text-conjure-text"
+                  : "bg-conjure-card border border-conjure-border text-conjure-muted"
+              }`}
             >
-              Previous version
+              {msg.content}
             </div>
-          )
-        )}
-
-        {/* Loading spinner */}
-        {isIterating && (
-          <div className="flex justify-center py-4">
-            <div
-              className="inline-block w-5 h-5 border-2 border-conjure-accent
-                          border-t-transparent rounded-full animate-spin"
-            />
           </div>
+        ))}
+
+        {/* Thinking trace */}
+        {isIterating && (
+          <ThinkingTrace messages={traceMessages} loading={isIterating} />
         )}
 
         {/* Error */}

@@ -4,6 +4,7 @@ import ChatInput from "./components/ChatInput";
 import CommandBar from "./components/CommandBar";
 import InstallPrompt from "./components/InstallPrompt";
 import ProjectChat from "./components/ProjectChat";
+import ThinkingTrace from "./components/ThinkingTrace";
 import { useApps } from "./hooks/useApps";
 import { useGenerate } from "./hooks/useGenerate";
 import type { App } from "./types/app";
@@ -17,6 +18,7 @@ export default function App() {
     generatedAppId,
     generatedAppName,
     error,
+    traceMessages,
     generate,
     dismiss,
   } = useGenerate(refreshApps);
@@ -93,14 +95,8 @@ export default function App() {
 
           <main className="flex-1 flex flex-col items-center justify-center px-4 gap-3">
             {isGenerating ? (
-              <div className="text-center">
-                <div
-                  className="inline-block w-6 h-6 border-2 border-conjure-accent border-t-transparent
-                              rounded-full animate-spin mb-3"
-                />
-                <p className="text-sm text-conjure-muted">
-                  Generating your app...
-                </p>
+              <div className="w-full max-w-md">
+                <ThinkingTrace messages={traceMessages} loading={isGenerating} />
               </div>
             ) : status === "error" && error ? (
               <div className="w-full max-w-md">

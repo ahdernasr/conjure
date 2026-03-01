@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { sendCommand } from "../api/command";
+import { textToSpeech } from "../api/voice";
 
 export interface CommandMessage {
   id: string;
@@ -16,6 +17,24 @@ export function useCommand() {
   const [loading, setLoading] = useState(false);
   const [handoff, setHandoff] = useState<Handoff | null>(null);
   const conversationIdRef = useRef<string | undefined>(undefined);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const speakResponse = useCallback(async (text: string) => {
+    try {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      const blob = await textToSpeech(text);
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => URL.revokeObjectURL(url);
+      await audio.play();
+    } catch {
+      console.warn("TTS playback failed");
+    }
+  }, []);
 
   const send = useCallback(async (message: string) => {
     const userMsg: CommandMessage = {
@@ -37,6 +56,8 @@ export function useCommand() {
       };
       setMessages((prev) => [...prev, assistantMsg]);
 
+      speakResponse(data.response);
+
       if (data.handoff_create && data.create_prompt) {
         setHandoff({ prompt: data.create_prompt });
       }
@@ -51,7 +72,7 @@ export function useCommand() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [speakResponse]);
 
   const clearHandoff = useCallback(() => setHandoff(null), []);
 

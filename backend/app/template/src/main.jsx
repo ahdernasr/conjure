@@ -29,6 +29,22 @@ function syncToServer() {
   }
 }
 
+function pullFromServer() {
+  try {
+    const xhr = new XMLHttpRequest()
+    xhr.open('GET', `/api/apps/${APP_ID}/data`, false)
+    xhr.send()
+    if (xhr.status === 200) {
+      const serverData = JSON.parse(xhr.responseText)
+      if (serverData && Object.keys(serverData).length > 0) {
+        writeStore(serverData)
+      }
+    }
+  } catch {
+    // silent — keep localStorage as fallback
+  }
+}
+
 window.__conjure = {
   getData() {
     return readStore()
@@ -66,7 +82,8 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register(`/apps/${APP_ID}/sw.js`).catch(() => {})
 }
 
-// ── Initial sync ────────────────────────────────────────────────────────────
+// ── Pull server data (Command Plane may have mutated it) then sync ─────────
+pullFromServer()
 syncToServer()
 
 // ── Render ──────────────────────────────────────────────────────────────────

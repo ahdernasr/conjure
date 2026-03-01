@@ -447,9 +447,25 @@ def cleanup_build_dir(build_dir: str) -> None:
         pass
 
 
-async def generate_app_pipeline(client, prompt: str, app_id: str, app_name: str) -> tuple[bool, str]:
+def _tool_progress(on_status):
+    """Create an on_progress callback that translates tool calls into human-readable status messages."""
+    async def callback(tool_name, args):
+        if tool_name == "write_file":
+            path = args.get("path", "file")
+            await on_status(f"Writing {path}")
+        elif tool_name == "read_file":
+            path = args.get("path", "file")
+            await on_status(f"Reading {path}")
+        elif tool_name == "list_files":
+            await on_status("Scanning project files...")
+    return callback
+
+
+async def generate_app_pipeline(client, prompt: str, app_id: str, app_name: str, on_status=None) -> tuple[bool, str]:
     """Full pipeline: setup → agentic gen → build+retry → deploy → cleanup.
-    Returns (success, theme_color)."""
+    Returns (success, theme_color).
+    on_status: Optional async callback(message) for progress reporting.
+    """
     build_dir = None
     try:
         # 1. Setup build directory
@@ -457,24 +473,31 @@ async def generate_app_pipeline(client, prompt: str, app_id: str, app_name: str)
         tool_executor = create_tool_executor(build_dir)
 
         # 2. Agentic generation
-        messages = await client.generate_app(prompt, build_dir)
+        if on_status:
+            await on_status("Writing code...")
+        messages = await client.generate_app(prompt, build_dir, on_progress=on_status and _tool_progress(on_status))
 
         # 3. Build with retries
         theme_color = _extract_theme_from_build(build_dir)
         for attempt in range(1 + settings.MAX_BUILD_RETRIES):
+            if on_status:
+                await on_status("Building app...")
             success, output = await run_vite_build(build_dir)
             if success:
                 logger.info(f"Build succeeded for {app_id} (attempt {attempt + 1})")
                 break
             logger.warning(f"Build failed for {app_id} (attempt {attempt + 1}): {output}")
             if attempt < settings.MAX_BUILD_RETRIES:
-                # Feed error back to Devstral for correction
-                messages = await client.fix_build_error(output, build_dir, messages)
+                if on_status:
+                    await on_status("Fixing build errors...")
+                messages = await client.fix_build_error(output, build_dir, messages, on_progress=on_status and _tool_progress(on_status))
         else:
             # All retries exhausted
             return False, "#6366f1"
 
         # 4. Deploy
+        if on_status:
+            await on_status("Deploying...")
         deploy_build(build_dir, app_id, app_name, theme_color)
         return True, theme_color
 
@@ -486,9 +509,11 @@ async def generate_app_pipeline(client, prompt: str, app_id: str, app_name: str)
             cleanup_build_dir(build_dir)
 
 
-async def iterate_app_pipeline(client, instruction: str, app_id: str, app_name: str) -> tuple[bool, str]:
+async def iterate_app_pipeline(client, instruction: str, app_id: str, app_name: str, on_status=None) -> tuple[bool, str]:
     """Iterate pipeline: setup → restore src → agentic refine → build+retry → deploy → cleanup.
-    Returns (success, theme_color)."""
+    Returns (success, theme_color).
+    on_status: Optional async callback(message) for progress reporting.
+    """
     build_dir = None
     try:
         # 1. Setup build directory
@@ -519,22 +544,30 @@ async def iterate_app_pipeline(client, instruction: str, app_id: str, app_name: 
         tool_executor = create_tool_executor(build_dir)
 
         # 3. Agentic refinement
-        messages = await client.refine_app(instruction, build_dir)
+        if on_status:
+            await on_status("Writing code...")
+        messages = await client.refine_app(instruction, build_dir, on_progress=on_status and _tool_progress(on_status))
 
         # 4. Build with retries
         theme_color = _extract_theme_from_build(build_dir)
         for attempt in range(1 + settings.MAX_BUILD_RETRIES):
+            if on_status:
+                await on_status("Building app...")
             success, output = await run_vite_build(build_dir)
             if success:
                 logger.info(f"Iterate build succeeded for {app_id} (attempt {attempt + 1})")
                 break
             logger.warning(f"Iterate build failed for {app_id} (attempt {attempt + 1}): {output}")
             if attempt < settings.MAX_BUILD_RETRIES:
-                messages = await client.fix_build_error(output, build_dir, messages)
+                if on_status:
+                    await on_status("Fixing build errors...")
+                messages = await client.fix_build_error(output, build_dir, messages, on_progress=on_status and _tool_progress(on_status))
         else:
             return False, "#6366f1"
 
         # 5. Deploy
+        if on_status:
+            await on_status("Deploying...")
         deploy_build(build_dir, app_id, app_name, theme_color)
         return True, theme_color
 

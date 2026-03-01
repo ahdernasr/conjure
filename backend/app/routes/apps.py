@@ -34,6 +34,13 @@ async def delete_app(app_id: str, db=Depends(get_db)):
     return {"status": "deleted", "id": app_id}
 
 
+@router.get("/{app_id}/data")
+async def get_app_data(app_id: str, db=Depends(get_db)):
+    """Return app's data.json. Used by apps to pull Command Plane mutations."""
+    service = AppService(db)
+    return await service.get_app_data(app_id)
+
+
 @router.post("/{app_id}/sync")
 async def sync_app_data(app_id: str, request: Request, db=Depends(get_db)):
     """Receive localStorage snapshot from a generated app.
