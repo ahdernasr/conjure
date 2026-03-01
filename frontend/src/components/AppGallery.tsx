@@ -52,7 +52,7 @@ export default function AppGallery({ apps, loading, onSelectApp, onBack, onDelet
   };
 
   return (
-    <div className="flex flex-col min-h-[100dvh]">
+    <div className="flex flex-col min-h-[100dvh] max-w-3xl mx-auto w-full">
       <header className="flex items-center gap-3 px-6 py-3 border-b border-border">
         <Button
           variant="ghost"

@@ -2,16 +2,11 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { ArrowLeft, ExternalLink, Download, AlertCircle, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import type { App } from "@/types/app";
 import { iterateApp } from "@/api/generate";
+import { getMessages, addMessage, type ChatMessage } from "@/api/apps";
 import PhonePreview from "@/components/PhonePreview";
 import ChatInput from "@/components/ChatInput";
 import ThinkingTrace from "@/components/ThinkingTrace";
 import { Button } from "@/components/ui/button";
-
-interface ChatMessage {
-  id: number;
-  role: "user" | "assistant";
-  content: string;
-}
 
 interface Props {
   app: App;
@@ -28,7 +23,22 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
   const [activeVersion, setActiveVersion] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const nextId = useRef(0);
+
+  // Load persisted messages on mount
+  useEffect(() => {
+    let cancelled = false;
+    getMessages(app.id).then((msgs) => {
+      if (cancelled) return;
+      setMessages(msgs);
+      // Derive version from the highest version in saved messages
+      const maxVersion = msgs.reduce((max, m) => Math.max(max, m.version ?? 0), 0);
+      if (maxVersion > 0) {
+        setVersion(maxVersion);
+        setActiveVersion(maxVersion);
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [app.id]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({
@@ -42,11 +52,9 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
   }, []);
 
   const handleSend = async (instruction: string) => {
-    const userId = nextId.current++;
-    setMessages((prev) => [
-      ...prev,
-      { id: userId, role: "user", content: instruction },
-    ]);
+    // Optimistically add user message to UI
+    const userMsg: ChatMessage = { id: Date.now(), role: "user", content: instruction, version: null };
+    setMessages((prev) => [...prev, userMsg]);
 
     setIsIterating(true);
     setTraceMessages([]);
@@ -58,11 +66,13 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
       setActiveVersion(newVersion);
       setIframeKey((prev) => prev + 1);
 
-      const confirmId = nextId.current++;
-      setMessages((prev) => [
-        ...prev,
-        { id: confirmId, role: "assistant", content: `Updated! (v${newVersion})` },
-      ]);
+      const assistantContent = `Done — version ${newVersion}`;
+      const assistantMsg: ChatMessage = { id: Date.now() + 1, role: "assistant", content: assistantContent, version: newVersion };
+      setMessages((prev) => [...prev, assistantMsg]);
+
+      // Persist both messages to backend
+      addMessage(app.id, "user", instruction, newVersion).catch(() => {});
+      addMessage(app.id, "assistant", assistantContent, newVersion).catch(() => {});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Iteration failed");
     } finally {

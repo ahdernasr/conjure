@@ -34,4 +34,15 @@ async def init_db():
                 FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS chat_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                app_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                version INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE
+            )
+        """)
         await db.commit()

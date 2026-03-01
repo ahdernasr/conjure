@@ -56,11 +56,20 @@ main.jsx defines `window.__conjure` with:
 - `window.__conjure.setData(data)` — saves state + syncs to server
 - `window.__conjure.getSchema()` — returns app capabilities schema
 
-Use these in your components to persist and read data. Example:
+Use these in your components to persist and read data.
+
+CANONICAL DATA LOADING PATTERN (use this in every app):
 ```jsx
-const data = window.__conjure.getData();
-window.__conjure.setData({ ...data, count: data.count + 1 });
+const [items, setItems] = useState(() => {
+  const data = window.__conjure.getData()
+  return data.items ?? []
+})
+
+useEffect(() => {
+  window.__conjure.setData({ items })
+}, [items])
 ```
+Initialize state lazily from getData() in useState's initializer function, then sync back with useEffect whenever state changes. This ensures data persists across reloads.
 
 WHAT YOU MUST DO:
 1. Write `src/App.jsx` with your complete app component (REQUIRED)
@@ -85,12 +94,24 @@ DESIGN RULES:
 - Use CSS variable classes: bg-background, text-foreground, bg-card, text-card-foreground, bg-primary, text-primary-foreground, bg-secondary, text-secondary-foreground, text-muted-foreground, bg-muted, border-border, bg-destructive
 - Do NOT use hardcoded hex colors. Use the CSS variable classes above.
 - To set a custom accent color, override --primary in a <style> tag: :root { --primary: 142 71% 45%; } (HSL values without commas)
-- Do NOT include an app name header, logo, or branding. These are mini utility apps — jump straight into the functionality.
-- Mobile-first: min tap targets 44px (min-h-[44px] min-w-[44px]), responsive layouts
+- CRITICAL: Do NOT render an app name, title header, logo, or any branding in the UI. No "FocusPulse" header, no app logo, no settings icon in a top bar. These are mini utility apps — the very first thing the user sees should be the core functionality (e.g. the timer itself, the list itself, the scoreboard itself). Jump straight into it.
+- PHONE VIEWPORT (390×844px frame — STRICT RULES):
+  - Root container: min-h-dvh flex flex-col
+  - Main content area: flex-1 (never explicit heights like h-screen or h-[600px])
+  - Horizontal padding: px-4, section spacing: py-3
+  - Use full 390px width — do NOT add max-w-sm, max-w-md, or other inner width constraints
+  - Scrollable lists: put overflow-y-auto on the list container, NOT the whole page
+  - Bottom actions: use mt-auto or shrink-0 at end of flex column
+  - No position: fixed — it breaks inside the iframe preview
+  - Max 2 columns for cards/items, max 4 columns for icon buttons
+  - Font sizes: headings text-xl, body text-sm, labels/captions text-xs
+  - No decorative elements larger than 120px
+  - Keep layouts compact and dense — no large empty gaps
+- Min tap targets 44px (min-h-[44px] min-w-[44px])
 - Use shadcn components: Button for actions, Card for containers, Badge for status, Input for text fields, Progress for bars, Tabs for sections, Switch for toggles, Dialog for modals
 - Numbers/stats: text-2xl font-bold tabular-nums
 - Transitions: transition-transform duration-150, active:scale-[0.97] on buttons
-- Full viewport height: min-h-dvh on root container
+- Full viewport height: min-h-dvh on root container, use flex column layout to distribute space evenly — do NOT rely on large fixed margins or padding
 
 COMPONENT USAGE EXAMPLES:
 ```jsx
@@ -113,6 +134,66 @@ import { Plus, Trash2, Check } from "lucide-react"
 <Switch checked={on} onCheckedChange={setOn} />
 ```
 
+COMPLETE WORKING EXAMPLE — Counter App (src/App.jsx):
+```jsx
+import { useState, useEffect } from "react"
+import { Button } from "./components/ui/button"
+import { Card, CardContent } from "./components/ui/card"
+import { Plus, Minus, RotateCcw } from "lucide-react"
+
+export default function App() {
+  const [count, setCount] = useState(() => {
+    const data = window.__conjure.getData()
+    return data.count ?? 0
+  })
+
+  useEffect(() => {
+    window.__conjure.setData({ count })
+  }, [count])
+
+  const vibrate = () => { try { navigator.vibrate([10]) } catch(e) {} }
+
+  return (
+    <>
+      <style>{`:root { --primary: 262 83% 58%; }`}</style>
+      <div className="min-h-dvh flex flex-col bg-background text-foreground px-4 py-6">
+        <div className="flex-1 flex flex-col items-center justify-center gap-6">
+          <span className="text-6xl font-bold tabular-nums text-foreground">{count}</span>
+          <div className="flex gap-3">
+            <Button size="lg" variant="outline" className="min-h-[44px] min-w-[44px] active:scale-[0.97] transition-transform duration-150" onClick={() => { setCount(c => c - 1); vibrate() }}>
+              <Minus className="w-5 h-5" />
+            </Button>
+            <Button size="lg" className="min-h-[44px] min-w-[44px] active:scale-[0.97] transition-transform duration-150" onClick={() => { setCount(c => c + 1); vibrate() }}>
+              <Plus className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+        <Button variant="ghost" className="mt-auto shrink-0 min-h-[44px] active:scale-[0.97] transition-transform duration-150" onClick={() => { setCount(0); vibrate() }}>
+          <RotateCcw className="w-4 h-4 mr-2" /> Reset
+        </Button>
+      </div>
+    </>
+  )
+}
+```
+
+Matching schema.json:
+```json
+{
+  "app_id": "PLACEHOLDER_APP_ID",
+  "name": "Counter",
+  "capabilities": ["count_tracking", "increment", "decrement", "reset"],
+  "data_shape": { "count": "number" },
+  "actions": {
+    "get_count": { "params": {}, "description": "Get the current count value" },
+    "set_count": { "params": { "value": "number" }, "description": "Set count to a specific value" },
+    "increment": { "params": {}, "description": "Increase count by 1" },
+    "decrement": { "params": {}, "description": "Decrease count by 1" },
+    "reset": { "params": {}, "description": "Reset count to 0" }
+  }
+}
+```
+
 INTERACTIVITY:
 - App MUST be fully functional, not a mockup
 - All actions via tap (not hover-dependent)
@@ -126,18 +207,40 @@ IMPORTANT:
 - Start by writing src/App.jsx, then schema.json
 - Use only Tailwind CSS classes for styling (no inline styles, no CSS files except index.css)
 - All components must use `export default`
-- Use PLACEHOLDER_APP_ID in schema.json (will be replaced at deploy time)"""
+- Use PLACEHOLDER_APP_ID in schema.json (will be replaced at deploy time)
+
+DO NOT (common mistakes that break builds):
+- Do NOT import from "react/jsx-runtime" — Vite handles JSX transform automatically
+- Do NOT use TypeScript syntax — no .tsx files, no type annotations, no interfaces, no `as` casts. This is a .jsx project.
+- Do NOT use require() — this is an ESM project, use import only
+- Do NOT use `export const App` or named exports for the main component — MUST be `export default function App()`
+- Do NOT use @/ path aliases — use relative paths like ./components/ui/button
+- Do NOT use React.lazy() or dynamic import() — everything is bundled together
+- Do NOT use "use client" or "use server" directives — this is NOT Next.js
+- Do NOT use position: fixed — it breaks inside the iframe preview. Use flex layout with mt-auto for bottom elements.
+- Do NOT use window.location or window.history for navigation — these are single-screen utility apps
+- Do NOT import React itself (e.g. `import React from "react"`) — only import hooks and functions you actually use: `import { useState, useEffect } from "react"`
+- Do NOT use className on React fragments (<> or <React.Fragment>) — fragments don't accept props
+
+RECOMMENDED WORKFLOW:
+1. Write src/App.jsx and any helper component files
+2. Write schema.json
+3. Run validate_jsx("src/App.jsx") to check for syntax issues
+4. Run check_imports("src/App.jsx") to verify all imports resolve
+5. Fix any issues found before finishing"""
 
 AUGMENTATION_SYSTEM_PROMPT = """You are Conjure's prompt architect. The user will give you a short app idea. Your job is to expand it into a complete, opinionated specification that a code-generation model can implement without asking any follow-up questions.
 
+CRITICAL SCOPE RULE: These are MICRO-APPS — small, single-purpose utilities displayed in a phone frame. Limit the spec to ONE core screen with ONE primary function. 3-5 features maximum. Do NOT design multi-screen apps, do NOT add settings pages, onboarding flows, or secondary views.
+
 Output ONLY the specification using the sections below. Be opinionated — never say "optionally" or "you could". Fill in every detail the user left out. Keep under 800 words total.
 
-APP_NAME: A short, catchy name (2-3 words max)
+APP_NAME: A short, catchy name (2-3 words max). This is for internal metadata ONLY — the generated app must NOT display it as a visible header, logo, or branding in the UI.
 
 DESCRIPTION: One sentence explaining what the app does and who it's for.
 
 FEATURES:
-- List at least 5 concrete features
+- List 3-5 concrete features (no more than 5)
 - Each feature is one line: "- Feature name: brief explanation"
 
 DATA MODEL:
@@ -153,7 +256,9 @@ EDGE CASES:
 - Format: "- Scenario: how the app responds"
 
 UI LAYOUT:
-- Describe the visual layout section by section (header, main area, controls, etc.)
+- Design for a 390×844px phone screen — NO desktop layouts, NO sidebar navigation. Maximum 2 columns for cards. Single-column stacked layout preferred. Every interactive element at least 44×44px.
+- Describe the visual layout section by section (main area, controls, etc.) — do NOT include an app name header, logo, or branding section. Jump straight into the core functionality.
+- Root layout: min-h-dvh flex flex-col with px-4 horizontal padding
 - Specify an accent color as HSL values (e.g. "142 71% 45%" for green) that fits the app's purpose
 - Format: "Accent color: H S% L%"
 - Reference available shadcn components: Button, Card, Badge, Input, Progress, Tabs, Switch, Separator, Dialog
@@ -164,6 +269,8 @@ SCHEMA:
 - actions: for EVERY user operation, provide { "params": {"param": "type"}, "description": "what it does" }. Include both read and write actions."""
 
 ITERATION_AUGMENTATION_SYSTEM_PROMPT = """You are Conjure's prompt architect. The user wants to modify an existing app. Expand their terse instruction into a clear, complete modification spec. Be opinionated — fill in details they left out. Keep under 300 words.
+
+CRITICAL: The modification spec should describe ONLY the changes requested. Do NOT re-architect the entire app. Keep modifications surgical — change the minimum needed to fulfill the request. Do NOT redesign layouts, swap component libraries, or refactor working code.
 
 Output ONLY the specification using the sections below.
 
@@ -195,10 +302,15 @@ def extract_app_name_from_spec(spec: str, fallback: str) -> str:
 
 AGENTIC_REFINER_SYSTEM_PROMPT = """You are Conjure's app refiner. You modify existing React+Tailwind apps based on user instructions.
 
-WORKFLOW:
-1. First, use `list_files` to see the project structure
-2. Use `read_file` to read the existing files you need to understand
-3. Use `write_file` to make your changes
+MANDATORY WORKFLOW (follow this exact order every time):
+1. ALWAYS run `list_files` first to see the project structure
+2. ALWAYS run `read_file("src/App.jsx")` to understand the current code
+3. ALWAYS run `read_file("schema.json")` to understand the data contract
+4. Plan the minimum edits needed to fulfill the request
+5. Write ONLY the files that need to change — do not rewrite files that don't need changes
+6. If the data shape changed, update schema.json too
+7. Run `validate_jsx("src/App.jsx")` to check for syntax issues
+8. Run `check_imports("src/App.jsx")` to verify all imports resolve
 
 AVAILABLE SHADCN COMPONENTS (pre-installed, import from ./components/ui/):
 - Button (variant: default|destructive|outline|secondary|ghost|link, size: default|sm|lg|icon)
@@ -281,7 +393,150 @@ AGENTIC_TOOLS = [
             }
         }
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "validate_jsx",
+            "description": "Validate a JSX file for common syntax errors before building. Checks bracket balance, bad imports, TypeScript syntax, missing default export, and other common mistakes. Run this after writing src/App.jsx.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to the JSX file to validate (e.g. 'src/App.jsx')"
+                    }
+                },
+                "required": ["path"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_imports",
+            "description": "Scan a JSX file and verify every import path resolves to an existing file in the project. Catches 'module not found' errors before building.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative path to the JSX file to check (e.g. 'src/App.jsx')"
+                    }
+                },
+                "required": ["path"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_component_api",
+            "description": "Get the props, variants, and usage example for a shadcn/ui component. Use this to check correct component API before writing code.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "component": {
+                        "type": "string",
+                        "description": "Component name: button, card, badge, input, progress, tabs, separator, switch, or dialog"
+                    }
+                },
+                "required": ["component"]
+            }
+        }
+    },
 ]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Component API reference (for get_component_api tool)
+# ─────────────────────────────────────────────────────────────────────────────
+
+SHADCN_COMPONENT_API = {
+    "button": {
+        "import": 'import { Button } from "./components/ui/button"',
+        "props": {
+            "variant": "default | destructive | outline | secondary | ghost | link",
+            "size": "default | sm | lg | icon",
+            "asChild": "boolean (render as child element)",
+            "disabled": "boolean",
+            "className": "string (additional classes)",
+        },
+        "example": '<Button variant="outline" size="sm" onClick={handleClick}><Plus className="w-4 h-4 mr-2" />Add</Button>',
+    },
+    "card": {
+        "import": 'import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "./components/ui/card"',
+        "props": {
+            "className": "string (additional classes)",
+        },
+        "subcomponents": ["Card", "CardHeader", "CardTitle", "CardDescription", "CardContent", "CardFooter"],
+        "example": "<Card><CardHeader><CardTitle>Title</CardTitle><CardDescription>Description</CardDescription></CardHeader><CardContent>Content here</CardContent><CardFooter>Footer</CardFooter></Card>",
+    },
+    "badge": {
+        "import": 'import { Badge } from "./components/ui/badge"',
+        "props": {
+            "variant": "default | secondary | destructive | outline",
+            "className": "string",
+        },
+        "example": '<Badge variant="secondary">Active</Badge>',
+    },
+    "input": {
+        "import": 'import { Input } from "./components/ui/input"',
+        "props": {
+            "type": "string (text, number, email, password, etc.)",
+            "placeholder": "string",
+            "value": "string",
+            "onChange": "function",
+            "disabled": "boolean",
+            "className": "string",
+        },
+        "example": '<Input placeholder="Enter value..." value={val} onChange={e => setVal(e.target.value)} />',
+    },
+    "progress": {
+        "import": 'import { Progress } from "./components/ui/progress"',
+        "props": {
+            "value": "number (0-100)",
+            "className": "string",
+        },
+        "example": "<Progress value={75} />",
+    },
+    "tabs": {
+        "import": 'import { Tabs, TabsList, TabsTrigger, TabsContent } from "./components/ui/tabs"',
+        "props": {
+            "defaultValue": "string (initial active tab)",
+            "value": "string (controlled active tab)",
+            "onValueChange": "function(value)",
+            "className": "string",
+        },
+        "subcomponents": ["Tabs", "TabsList", "TabsTrigger (value: string)", "TabsContent (value: string)"],
+        "example": '<Tabs defaultValue="tab1"><TabsList><TabsTrigger value="tab1">Tab 1</TabsTrigger><TabsTrigger value="tab2">Tab 2</TabsTrigger></TabsList><TabsContent value="tab1">Content 1</TabsContent><TabsContent value="tab2">Content 2</TabsContent></Tabs>',
+    },
+    "separator": {
+        "import": 'import { Separator } from "./components/ui/separator"',
+        "props": {
+            "orientation": "horizontal | vertical",
+            "className": "string",
+        },
+        "example": "<Separator />",
+    },
+    "switch": {
+        "import": 'import { Switch } from "./components/ui/switch"',
+        "props": {
+            "checked": "boolean",
+            "onCheckedChange": "function(checked: boolean)",
+            "disabled": "boolean",
+            "className": "string",
+        },
+        "example": "<Switch checked={on} onCheckedChange={setOn} />",
+    },
+    "dialog": {
+        "import": 'import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "./components/ui/dialog"',
+        "props": {
+            "open": "boolean (controlled)",
+            "onOpenChange": "function(open: boolean)",
+        },
+        "subcomponents": ["Dialog", "DialogTrigger", "DialogContent", "DialogHeader", "DialogTitle", "DialogDescription", "DialogFooter"],
+        "example": '<Dialog><DialogTrigger asChild><Button>Open</Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>Title</DialogTitle><DialogDescription>Description</DialogDescription></DialogHeader><DialogFooter><Button>Save</Button></DialogFooter></DialogContent></Dialog>',
+    },
+}
 
 # Protected files that Devstral must not overwrite
 PROTECTED_FILES = {
@@ -350,10 +605,165 @@ def create_tool_executor(build_dir: str):
                     files.append(str(p.relative_to(build_path)))
             return "\n".join(files) if files else "(empty project)"
 
+        elif tool_name == "validate_jsx":
+            rel_path = args.get("path", "").replace("\\", "/")
+            try:
+                full_path = _validate_path(rel_path)
+            except ValueError as e:
+                return f"Error: {e}"
+            if not full_path.exists():
+                return f"Error: File not found: {rel_path}"
+            content = full_path.read_text(encoding="utf-8")
+            return _validate_jsx_content(content, rel_path)
+
+        elif tool_name == "check_imports":
+            rel_path = args.get("path", "").replace("\\", "/")
+            try:
+                full_path = _validate_path(rel_path)
+            except ValueError as e:
+                return f"Error: {e}"
+            if not full_path.exists():
+                return f"Error: File not found: {rel_path}"
+            content = full_path.read_text(encoding="utf-8")
+            return _check_imports_content(content, rel_path, build_path)
+
+        elif tool_name == "get_component_api":
+            component = args.get("component", "").lower().strip()
+            if component not in SHADCN_COMPONENT_API:
+                available = ", ".join(sorted(SHADCN_COMPONENT_API.keys()))
+                return f"Unknown component '{component}'. Available: {available}"
+            api = SHADCN_COMPONENT_API[component]
+            lines = [f"## {component}"]
+            lines.append(f"Import: {api['import']}")
+            lines.append("Props:")
+            for prop, desc in api["props"].items():
+                lines.append(f"  - {prop}: {desc}")
+            if "subcomponents" in api:
+                lines.append(f"Subcomponents: {', '.join(api['subcomponents'])}")
+            lines.append(f"Example: {api['example']}")
+            return "\n".join(lines)
+
         else:
             return f"Error: Unknown tool '{tool_name}'"
 
     return execute
+
+
+def _validate_jsx_content(content: str, file_path: str) -> str:
+    """Validate JSX content for common errors. Returns issues or 'OK'."""
+    issues = []
+
+    # Check bracket balance
+    for open_b, close_b, name in [("{", "}", "curly braces"), ("(", ")", "parentheses"), ("[", "]", "square brackets")]:
+        depth = 0
+        in_string = False
+        string_char = None
+        for i, ch in enumerate(content):
+            if in_string:
+                if ch == string_char and (i == 0 or content[i-1] != "\\"):
+                    in_string = False
+                continue
+            if ch in ('"', "'", "`"):
+                in_string = True
+                string_char = ch
+                continue
+            if ch == open_b:
+                depth += 1
+            elif ch == close_b:
+                depth -= 1
+        if depth != 0:
+            issues.append(f"Mismatched {name}: {'more opens' if depth > 0 else 'more closes'} (off by {abs(depth)})")
+
+    # Check for bad imports
+    bad_import_patterns = [
+        (r'''from\s+['"]react/jsx-runtime['"]''', "Do not import from 'react/jsx-runtime' — Vite handles JSX transform"),
+        (r'''\brequire\s*\(''', "Do not use require() — this is an ESM project, use import"),
+        (r'''from\s+['"]@/''', "Do not use @/ path aliases — use relative paths like ./components/ui/"),
+        (r'''\bimport\s+React\s+from\s+['"]react['"]''', "Do not import React default — import only hooks: import { useState } from 'react'"),
+    ]
+    for pattern, message in bad_import_patterns:
+        if re.search(pattern, content):
+            issues.append(message)
+
+    # Check for TypeScript syntax
+    ts_patterns = [
+        (r''':\s*(string|number|boolean|any|void|never|unknown)\s*[;,\)=]''', "TypeScript type annotation detected — this is a .jsx project, remove type annotations"),
+        (r'''\binterface\s+\w+\s*\{''', "TypeScript interface detected — not allowed in .jsx"),
+        (r'''\btype\s+\w+\s*=''', "TypeScript type alias detected — not allowed in .jsx"),
+        (r'''\bas\s+(string|number|boolean|any|const)\b''', "TypeScript 'as' cast detected — not allowed in .jsx"),
+        (r'''<\w+>\s*\(''', None),  # Skip — could be JSX, not TS generic
+    ]
+    for pattern, message in ts_patterns:
+        if message and re.search(pattern, content):
+            issues.append(message)
+
+    # Check for missing export default
+    if not re.search(r'''export\s+default\s+function''', content):
+        if not re.search(r'''export\s+default\s+''', content):
+            issues.append("Missing 'export default function' — main component must use export default")
+
+    # Check for Next.js directives
+    if '"use client"' in content or "'use client'" in content:
+        issues.append("Remove 'use client' directive — this is NOT Next.js")
+    if '"use server"' in content or "'use server'" in content:
+        issues.append("Remove 'use server' directive — this is NOT Next.js")
+
+    # Check for React.lazy
+    if "React.lazy" in content or "React.lazy(" in content:
+        issues.append("Do not use React.lazy() — no code splitting needed")
+
+    # Check for position fixed
+    if "position: fixed" in content or "position:fixed" in content or "fixed" in re.findall(r'className="[^"]*\bfixed\b[^"]*"', content):
+        issues.append("Avoid position:fixed — it breaks inside iframe preview. Use flex layout with mt-auto.")
+
+    if issues:
+        return f"VALIDATION ISSUES in {file_path}:\n" + "\n".join(f"- {issue}" for issue in issues)
+    return f"OK — {file_path} passed all checks"
+
+
+def _check_imports_content(content: str, file_path: str, build_path: Path) -> str:
+    """Check that all import paths in a JSX file resolve to existing files."""
+    # Known external packages that don't need file resolution
+    external_packages = {"react", "react-dom", "lucide-react"}
+
+    issues = []
+    import_pattern = re.compile(r'''(?:import|from)\s+['"]([^'"]+)['"]''')
+    file_dir = (build_path / file_path).parent
+
+    for match in import_pattern.finditer(content):
+        import_path = match.group(1)
+
+        # Skip external packages
+        if import_path in external_packages or import_path.startswith("react/") or import_path.startswith("react-dom/"):
+            continue
+
+        # Relative imports — resolve to file
+        if import_path.startswith("."):
+            # Try with common extensions
+            resolved_base = (file_dir / import_path).resolve()
+            found = False
+            candidates = [
+                resolved_base,
+                resolved_base.with_suffix(".jsx"),
+                resolved_base.with_suffix(".js"),
+                resolved_base.with_suffix(".json"),
+                resolved_base / "index.jsx",
+                resolved_base / "index.js",
+            ]
+            for candidate in candidates:
+                if candidate.exists() and str(candidate).startswith(str(build_path)):
+                    found = True
+                    break
+            if not found:
+                issues.append(f"Import '{import_path}' not found (tried: {import_path}.jsx, {import_path}.js, {import_path}/index.jsx)")
+        else:
+            # Non-relative, non-external — likely an error
+            if import_path not in external_packages:
+                issues.append(f"Import '{import_path}' is not a known package. Use relative paths for local files (e.g., ./{import_path})")
+
+    if issues:
+        return f"IMPORT ISSUES in {file_path}:\n" + "\n".join(f"- {issue}" for issue in issues)
+    return f"OK — all imports in {file_path} resolve correctly"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -527,19 +937,31 @@ async def generate_app_pipeline(client, prompt: str, app_id: str, app_name: str,
         theme_color = _extract_theme_from_build(build_dir)
         if on_status:
             await on_status("Putting it all together...")
+        last_error = None
         for attempt in range(settings.MAX_BUILD_RETRIES + 1):
             success, output = await run_vite_build(build_dir)
             if success:
                 logger.info(f"Build succeeded for {app_id} (attempt {attempt + 1})")
                 break
             logger.warning(f"Build failed for {app_id} (attempt {attempt + 1}): {output}")
+            # Detect duplicate errors — abort early if same error repeats
+            error_sig = output.strip()[:200]
+            if last_error and error_sig == last_error:
+                logger.error(f"Duplicate build error for {app_id}, aborting retries")
+                return False, "#6366f1"
+            last_error = error_sig
             if on_status:
                 await on_status("Tweaking a few things...")
             messages = await client.fix_build_error(output, build_dir, messages, on_progress=on_status and _tool_progress(on_status))
         else:
             return False, "#6366f1"
 
-        # 4. Deploy
+        # 4. Post-build quality check
+        qc_warnings = post_build_quality_check(build_dir)
+        for warning in qc_warnings:
+            logger.warning(f"Quality check [{app_id}]: {warning}")
+
+        # 5. Deploy
         if on_status:
             await on_status("Almost ready...")
         deploy_build(build_dir, app_id, app_name, theme_color)
@@ -596,19 +1018,31 @@ async def iterate_app_pipeline(client, instruction: str, app_id: str, app_name: 
         theme_color = _extract_theme_from_build(build_dir)
         if on_status:
             await on_status("Putting it all together...")
+        last_error = None
         for attempt in range(settings.MAX_BUILD_RETRIES + 1):
             success, output = await run_vite_build(build_dir)
             if success:
                 logger.info(f"Iterate build succeeded for {app_id} (attempt {attempt + 1})")
                 break
             logger.warning(f"Iterate build failed for {app_id} (attempt {attempt + 1}): {output}")
+            # Detect duplicate errors — abort early if same error repeats
+            error_sig = output.strip()[:200]
+            if last_error and error_sig == last_error:
+                logger.error(f"Duplicate build error for {app_id}, aborting retries")
+                return False, "#6366f1"
+            last_error = error_sig
             if on_status:
                 await on_status("Tweaking a few things...")
             messages = await client.fix_build_error(output, build_dir, messages, on_progress=on_status and _tool_progress(on_status))
         else:
             return False, "#6366f1"
 
-        # 5. Deploy
+        # 5. Post-build quality check
+        qc_warnings = post_build_quality_check(build_dir)
+        for warning in qc_warnings:
+            logger.warning(f"Quality check [{app_id}]: {warning}")
+
+        # 6. Deploy
         if on_status:
             await on_status("Almost ready...")
         deploy_build(build_dir, app_id, app_name, theme_color)
@@ -620,6 +1054,48 @@ async def iterate_app_pipeline(client, instruction: str, app_id: str, app_name: 
     finally:
         if build_dir:
             cleanup_build_dir(build_dir)
+
+
+def post_build_quality_check(build_dir: str) -> list[str]:
+    """Run quality checks after a successful build. Returns list of warnings."""
+    warnings = []
+    build_path = Path(build_dir)
+
+    # Check schema.json exists and has required fields
+    schema_path = build_path / "schema.json"
+    if not schema_path.exists():
+        warnings.append("schema.json is missing")
+    else:
+        try:
+            schema = json.loads(schema_path.read_text(encoding="utf-8"))
+            if not schema.get("actions"):
+                warnings.append("schema.json has no actions — Command Plane won't be able to interact with this app")
+            if not schema.get("data_shape"):
+                warnings.append("schema.json has no data_shape")
+        except (json.JSONDecodeError, Exception):
+            warnings.append("schema.json is not valid JSON")
+
+    # Check App.jsx quality
+    app_path = build_path / "src" / "App.jsx"
+    if app_path.exists():
+        content = app_path.read_text(encoding="utf-8")
+
+        # Check for min-h-dvh (fills viewport)
+        if "min-h-dvh" not in content and "min-h-screen" not in content:
+            warnings.append("App.jsx missing min-h-dvh — app may not fill the phone viewport")
+
+        # Check for export default
+        if "export default" not in content:
+            warnings.append("App.jsx missing export default")
+
+        # Check for excessive hardcoded colors
+        hex_colors = re.findall(r'#[0-9a-fA-F]{6}', content)
+        # Filter out common theme-related ones that appear in style tags
+        unique_colors = set(c.lower() for c in hex_colors)
+        if len(unique_colors) > 5:
+            warnings.append(f"App.jsx has {len(unique_colors)} hardcoded hex colors — prefer CSS variable classes (bg-primary, text-foreground, etc.)")
+
+    return warnings
 
 
 def _extract_theme_from_build(build_dir: str) -> str:

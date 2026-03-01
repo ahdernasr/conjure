@@ -77,13 +77,13 @@
 }
 
 @keyframes aurora-breathe {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.05); }
+  0%, 100% { transform: scale(0.92); }
+  50% { transform: scale(1.1); }
 }
 
 @keyframes aurora-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.12); }
+  0%, 100% { transform: scale(0.95); }
+  50% { transform: scale(1.18); }
 }
 
 /* ── Utility classes ── */

@@ -1,7 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel
 from ..database import get_db
 from ..models.app import AppResponse, AppListResponse
 from ..services.app_service import AppService
+
+
+class ChatMessageRequest(BaseModel):
+    role: str
+    content: str
+    version: int | None = None
 
 router = APIRouter()
 
@@ -39,6 +46,22 @@ async def get_app_data(app_id: str, db=Depends(get_db)):
     """Return app's data.json. Used by apps to pull Command Plane mutations."""
     service = AppService(db)
     return await service.get_app_data(app_id)
+
+
+@router.get("/{app_id}/messages")
+async def get_messages(app_id: str, db=Depends(get_db)):
+    """Get all chat messages for an app."""
+    service = AppService(db)
+    messages = await service.get_messages(app_id)
+    return {"messages": messages}
+
+
+@router.post("/{app_id}/messages")
+async def add_message(app_id: str, msg: ChatMessageRequest, db=Depends(get_db)):
+    """Add a chat message for an app."""
+    service = AppService(db)
+    result = await service.add_message(app_id, msg.role, msg.content, msg.version)
+    return result
 
 
 @router.post("/{app_id}/sync")

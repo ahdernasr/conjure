@@ -14,10 +14,12 @@ GOLDEN_NAMES = {
 }
 
 # Keywords for matching prompts to golden templates
+# Only include specific keywords — avoid generic words like "timer", "list", "game"
+# that would false-match unrelated prompts
 GOLDEN_KEYWORDS = {
-    "hiit": ["hiit", "timer", "workout", "exercise", "fitness", "interval", "tabata", "training"],
-    "poker": ["poker", "card", "scoreboard", "score", "chip", "game", "casino", "betting"],
-    "packing": ["packing", "pack", "list", "checklist", "travel", "trip", "luggage", "suitcase"],
+    "hiit": ["hiit", "hiit timer", "workout timer", "interval training", "tabata", "work rest"],
+    "poker": ["poker", "poker scoreboard", "chip count", "casino", "poker night"],
+    "packing": ["packing list", "packing checklist", "travel pack", "luggage", "suitcase"],
 }
 
 GOLDEN_TEMPLATES = {}
@@ -39,7 +41,8 @@ def deploy_golden(golden_id: str, app_id: str) -> tuple[str, str, str]:
 
 def pick_best_golden(prompt: str) -> str | None:
     """Simple keyword matching to pick the most relevant golden template.
-    Returns golden_id or None if no good match."""
+    Returns golden_id or None if no good match.
+    Requires at least 1 keyword match — never falls back to a random template."""
     prompt_lower = prompt.lower()
     best_id = None
     best_score = 0
@@ -50,11 +53,10 @@ def pick_best_golden(prompt: str) -> str | None:
             best_score = score
             best_id = golden_id
 
-    # Return the best match, or a default if nothing matched
-    if best_id:
+    # Only return if we actually matched something
+    if best_score >= 1:
         return best_id
-    # Default to packing list as the most generic template
-    return "packing"
+    return None
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1. HIIT TIMER

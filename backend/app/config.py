@@ -11,13 +11,12 @@ class Settings(BaseSettings):
     DATABASE_PATH: str = "conjure.db"
     APPS_DIR: str = "apps"
     TEMPLATE_DIR: str = "app/template"
-    MAX_BUILD_RETRIES: int = 10
+    MAX_BUILD_RETRIES: int = 5
     BUILD_TIMEOUT: int = 120
 
     # Model assignments
-    DEVSTRAL_MODEL: str = "devstral-2512"            # Generator + Refiner (agentic coding)
-    MISTRAL_LARGE_MODEL: str = "mistral-large-latest"  # Command Plane (reasoning)
-    CODESTRAL_MODEL: str = "codestral-latest"        # FIM completion only (unused for now)
+    DEVSTRAL_MODEL: str = "devstral-2512"              # Generator + Refiner — Devstral 2 (123B, 256K ctx)
+    MISTRAL_LARGE_MODEL: str = "mistral-large-2512"    # Command Plane — Mistral Large 3 (675B MoE)
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

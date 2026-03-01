@@ -12,8 +12,10 @@ const TOP_INSET = 44;
 const BOTTOM_INSET = 34;
 
 export default function PhonePreview({ appId, iframeKey = 0 }: Props) {
-  const IFRAME_HEIGHT = 844;
   const phoneHeight = Math.round(PHONE_WIDTH * (19.5 / 9));
+  // iframe height = visible safe area (between insets) in unscaled pixels
+  // so 100dvh inside the iframe matches what's actually shown
+  const IFRAME_HEIGHT = Math.round((phoneHeight - TOP_INSET - BOTTOM_INSET) / SCALE);
 
   return (
     <div className="mx-auto w-full" style={{ maxWidth: `${PHONE_WIDTH}px` }}>

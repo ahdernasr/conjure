@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, ArrowRight, ArrowUp, AlertCircle, Mic, Loader2, Timer, ListChecks, Trophy } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUp, AlertCircle, Loader2, Timer, ListChecks, Trophy } from "lucide-react";
 import AppGallery from "@/components/AppGallery";
 import ChatInput from "@/components/ChatInput";
 import InstallPrompt from "@/components/InstallPrompt";
@@ -134,7 +134,7 @@ export default function App() {
 
       ) : view === "create" ? (
         /* ── Create View ── */
-        <>
+        <div className="flex flex-col min-h-[100dvh] max-w-3xl mx-auto w-full">
           <header className="flex items-center gap-3 px-6 py-3 border-b border-border">
             <Button
               variant="ghost"
@@ -172,11 +172,11 @@ export default function App() {
           <div className="sticky bottom-0 bg-background border-t border-border px-6 py-3">
             <ChatInput onSend={(msg) => generate(msg)} loading={isGenerating} />
           </div>
-        </>
+        </div>
 
       ) : (
         /* ── Home View (Voice-First) ── */
-        <>
+        <div className="flex flex-col min-h-[100dvh] max-w-3xl mx-auto w-full">
           {/* Header */}
           <header className="flex items-center justify-between px-6 py-4">
             <h1 className="text-xl font-bold tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif", letterSpacing: '-0.02em' }}>Conjure</h1>
@@ -199,29 +199,35 @@ export default function App() {
                 <p className="text-2xl font-semibold text-foreground mb-2 tracking-tight">
                   What do you want to build?
                 </p>
-                <p className="text-sm text-muted-foreground mb-8">
+                <p className="text-sm text-muted-foreground mb-12">
                   Describe an app and we'll create it instantly
                 </p>
 
-                {/* Aurora Mic Orb */}
-                <div className="relative flex items-center justify-center mb-1" style={{ width: 160, height: 160 }}>
+                {/* Aurora Orb — the blob IS the button */}
+                <button
+                  onClick={toggleRecording}
+                  disabled={isTranscribing || cmdLoading}
+                  className="relative flex items-center justify-center mb-2 cursor-pointer transition-transform duration-300 hover:scale-105 active:scale-95 disabled:opacity-60 outline-none"
+                  style={{ width: 200, height: 200 }}
+                >
                   {/* Glow wrapper — breathes on idle, pulses on record */}
                   <div
                     className="absolute inset-0"
                     style={{
                       animation: isRecording
-                        ? 'aurora-pulse 1.5s ease-in-out infinite'
-                        : 'aurora-breathe 4s ease-in-out infinite',
+                        ? 'aurora-pulse 1.2s ease-in-out infinite'
+                        : 'aurora-breathe 3s ease-in-out infinite',
                     }}
                   >
                     {/* Layer 1 — indigo/sky conic gradient */}
                     <div
-                      className={`absolute inset-0 rounded-full transition-opacity duration-700 ${
+                      className={`absolute rounded-full transition-opacity duration-700 ${
                         isRecording ? 'opacity-70' : 'opacity-30'
                       }`}
                       style={{
+                        inset: '-15px',
                         background: 'conic-gradient(from 0deg, #818cf8, #38bdf8, #818cf8)',
-                        filter: 'blur(30px)',
+                        filter: 'blur(40px)',
                         animation: `aurora-spin ${isRecording ? '3s' : '8s'} linear infinite`,
                       }}
                     />
@@ -231,9 +237,9 @@ export default function App() {
                         isRecording ? 'opacity-60' : 'opacity-20'
                       }`}
                       style={{
-                        inset: '10px',
+                        inset: '-5px',
                         background: 'conic-gradient(from 180deg, #c084fc, #2dd4bf, #c084fc)',
-                        filter: 'blur(25px)',
+                        filter: 'blur(35px)',
                         animation: `aurora-spin ${isRecording ? '2.5s' : '6s'} linear infinite reverse`,
                       }}
                     />
@@ -251,28 +257,16 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Mic button */}
-                  <button
-                    onClick={toggleRecording}
-                    disabled={isTranscribing || cmdLoading}
-                    className={`relative z-10 w-[72px] h-[72px] rounded-full flex items-center justify-center transition-all duration-300 shadow-lg ${
-                      isRecording
-                        ? 'bg-foreground text-background scale-110'
-                        : isTranscribing
-                        ? 'bg-foreground/80 text-background'
-                        : 'bg-foreground text-background hover:scale-105 active:scale-95'
-                    } disabled:opacity-60`}
-                  >
-                    {isTranscribing ? (
-                      <Loader2 className="w-7 h-7 animate-spin" />
-                    ) : (
-                      <Mic className="w-7 h-7" />
-                    )}
-                  </button>
-                </div>
+                  {/* Transcribing indicator */}
+                  {isTranscribing && (
+                    <div className="relative z-10">
+                      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
+                </button>
 
                 {/* Mic status label */}
-                <p className={`text-xs mb-5 transition-colors duration-300 ${
+                <p className={`text-xs mt-4 mb-8 transition-colors duration-300 ${
                   isRecording ? 'text-foreground font-medium' : 'text-muted-foreground'
                 }`}>
                   {isRecording ? 'Listening...' : isTranscribing ? 'Transcribing...' : 'Tap to speak'}
@@ -386,7 +380,7 @@ export default function App() {
               />
             </div>
           )}
-        </>
+        </div>
       )}
 
       <InstallPrompt

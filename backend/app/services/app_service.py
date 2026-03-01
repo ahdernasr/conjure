@@ -78,3 +78,21 @@ class AppService:
             (theme_color, app_id),
         )
         await self.db.commit()
+
+    async def get_messages(self, app_id: str) -> list[dict]:
+        """Get all chat messages for an app."""
+        cursor = await self.db.execute(
+            "SELECT id, role, content, version, created_at FROM chat_messages WHERE app_id = ? ORDER BY id ASC",
+            (app_id,),
+        )
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    async def add_message(self, app_id: str, role: str, content: str, version: int | None = None) -> dict:
+        """Add a chat message for an app."""
+        cursor = await self.db.execute(
+            "INSERT INTO chat_messages (app_id, role, content, version) VALUES (?, ?, ?, ?)",
+            (app_id, role, content, version),
+        )
+        await self.db.commit()
+        return {"id": cursor.lastrowid, "role": role, "content": content, "version": version}

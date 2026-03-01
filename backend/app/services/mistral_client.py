@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from mistralai import Mistral
 from ..config import settings
 from .generator import (
@@ -148,7 +149,15 @@ class MistralClientWrapper:
 
     async def generate_app(self, prompt: str, build_dir: str, on_progress=None) -> list[dict]:
         """Run agentic generation loop. Returns message history."""
-        user_message = f"Create the following app according to this specification:\n\n{prompt}"
+        user_message = (
+            f"Create the following app according to this specification:\n\n{prompt}\n\n"
+            "Before writing any files, briefly plan:\n"
+            "1. What React state variables do you need?\n"
+            "2. What data shape for window.__conjure?\n"
+            "3. Which shadcn components will you use?\n"
+            "4. Layout structure top-to-bottom (how will the 390×844px screen be divided?)\n"
+            "Then proceed to write the files."
+        )
         return await self.run_agentic_loop(
             AGENTIC_GENERATOR_SYSTEM_PROMPT,
             user_message,
@@ -170,6 +179,29 @@ class MistralClientWrapper:
 
     # -- Build Error Fix -------------------------------------------------------
 
+    @staticmethod
+    def _clean_build_errors(error_output: str) -> str:
+        """Pre-process Vite build output to extract relevant error lines."""
+        error_keywords = {"error", "Error", "ERROR", "failed", "Failed", "Cannot", "cannot",
+                          "not found", "unexpected", "Unexpected", "SyntaxError", "TypeError",
+                          "ReferenceError", "is not defined", "is not a function", "Module",
+                          "resolve", "ENOENT"}
+        lines = error_output.splitlines()
+        relevant = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+            if any(kw in stripped for kw in error_keywords):
+                # Strip temp directory paths for clarity
+                cleaned = re.sub(r'/tmp/build-[a-f0-9]+/', './', stripped)
+                cleaned = re.sub(r'/var/folders/[^\s]+/build-[a-f0-9]+/', './', cleaned)
+                relevant.append(cleaned)
+        # Limit to 10 most relevant lines
+        if not relevant:
+            relevant = lines[:10]  # fallback: first 10 lines
+        return "\n".join(relevant[:10])
+
     async def fix_build_error(
         self,
         error_output: str,
@@ -179,12 +211,14 @@ class MistralClientWrapper:
     ) -> list[dict]:
         """Append build error as user message and continue the agentic loop."""
         tool_executor = create_tool_executor(build_dir)
+        cleaned_errors = self._clean_build_errors(error_output)
 
         messages.append({
             "role": "user",
             "content": (
-                f"The Vite build failed with the following error:\n\n```\n{error_output}\n```\n\n"
-                "Please fix the code and write the corrected files."
+                f"The Vite build failed with the following error:\n\n```\n{cleaned_errors}\n```\n\n"
+                "Please fix the code and write the corrected files. "
+                "After fixing, run validate_jsx on the changed files to verify."
             ),
         })
 
