@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+from pathlib import Path
 from mistralai import Mistral
 from ..config import settings
 from .generator import (
@@ -56,6 +57,83 @@ class MistralClientWrapper:
         except Exception as e:
             logger.warning(f"Augmentation failed, using raw prompt: {e}")
             return prompt
+
+    # -- Intent Classification -------------------------------------------------
+
+    async def classify_intent(self, message: str) -> str:
+        """Classify whether a user message is a code change request or a question.
+
+        Returns "code_change" or "text_response". Falls back to "code_change" on failure.
+        """
+        try:
+            response = await self._client.chat.complete_async(
+                model=settings.MISTRAL_LARGE_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Classify the user message as either CODE (they want to change/add/remove/fix something in the app) "
+                            "or CHAT (they are asking a question, requesting an explanation, or making conversation). "
+                            "Reply with exactly one word: CODE or CHAT"
+                        ),
+                    },
+                    {"role": "user", "content": message},
+                ],
+                temperature=0.0,
+                max_tokens=10,
+            )
+            result = response.choices[0].message.content.strip().upper()
+            if "CHAT" in result:
+                return "text_response"
+            return "code_change"
+        except Exception as e:
+            logger.warning(f"Intent classification failed, defaulting to code_change: {e}")
+            return "code_change"
+
+    # -- Question Answering ----------------------------------------------------
+
+    async def answer_question(self, question: str, app_id: str) -> str:
+        """Answer a question about the user's app using its source code as context.
+
+        Returns a concise 2-4 sentence answer.
+        """
+        try:
+            app_dir = Path(settings.APPS_DIR) / app_id / "_src"
+            context_parts = []
+
+            app_jsx = app_dir / "App.jsx"
+            if app_jsx.exists():
+                context_parts.append(f"src/App.jsx:\n```jsx\n{app_jsx.read_text(encoding='utf-8')}\n```")
+
+            schema_file = app_dir / "schema.json"
+            if schema_file.exists():
+                context_parts.append(f"schema.json:\n```json\n{schema_file.read_text(encoding='utf-8')}\n```")
+
+            context = "\n\n".join(context_parts) if context_parts else "No source code available."
+
+            response = await self._client.chat.complete_async(
+                model=settings.MISTRAL_LARGE_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a helpful assistant for Conjure, a platform that builds small React+Tailwind phone apps. "
+                            "The user is asking about their app. Answer concisely in 2-4 sentences based on the app's source code below.\n\n"
+                            f"{context}"
+                        ),
+                    },
+                    {"role": "user", "content": question},
+                ],
+                temperature=0.3,
+                max_tokens=300,
+            )
+            result = response.choices[0].message.content
+            if result and result.strip():
+                return result.strip()
+            return "I couldn't find a clear answer. Try rephrasing your question or describe a change you'd like to make."
+        except Exception as e:
+            logger.warning(f"Question answering failed: {e}")
+            return "I had trouble reading the app's code. Try asking again or describe a change you'd like to make."
 
     # -- Agentic Loop ----------------------------------------------------------
 
@@ -169,7 +247,15 @@ class MistralClientWrapper:
 
     async def refine_app(self, instruction: str, build_dir: str, on_progress=None) -> list[dict]:
         """Run agentic refinement loop. Returns message history."""
-        user_message = f"Modify the existing app according to this specification:\n\n{instruction}"
+        user_message = (
+            f"Modify the existing app according to this specification:\n\n{instruction}\n\n"
+            "Before making any changes, briefly plan:\n"
+            "1. What files need to change?\n"
+            "2. What state variables are added/modified?\n"
+            "3. Does the data shape (window.__conjure) need updating?\n"
+            "4. Which existing UI elements are affected?\n"
+            "Then proceed with the mandatory workflow."
+        )
         return await self.run_agentic_loop(
             AGENTIC_REFINER_SYSTEM_PROMPT,
             user_message,

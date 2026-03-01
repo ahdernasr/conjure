@@ -64,6 +64,7 @@ async def generate_app(request: GenerateRequest, db=Depends(get_db)):
             yield _sse_event({"type": "complete", "data": {
                 "id": app_id, "name": app_name,
                 "description": request.prompt, "theme_color": theme_color,
+                "version": 1,
             }})
 
         return StreamingResponse(golden_stream(), media_type="text/event-stream")
@@ -119,6 +120,7 @@ async def generate_app(request: GenerateRequest, db=Depends(get_db)):
             await queue.put({"type": "complete", "data": {
                 "id": app_id, "name": app_name,
                 "description": request.prompt, "theme_color": theme_color,
+                "version": 1,
             }})
         except Exception as e:
             logger.error(f"Generate stream error: {e}")
@@ -157,20 +159,29 @@ async def iterate_app(request: IterateRequest, db=Depends(get_db)):
     async def on_status(message: str):
         await queue.put({"type": "tool", "message": message})
 
+    current_version = app.get("version", 1) or 1
+
     async def run_pipeline():
         client = MistralClientWrapper()
 
         try:
+            # Intent classification — skip full pipeline for questions
             await queue.put({"type": "status", "message": "Looking at your app..."})
+            intent = await client.classify_intent(request.instruction)
+            if intent == "text_response":
+                answer = await client.answer_question(request.instruction, request.app_id)
+                await queue.put({"type": "chat_response", "message": answer})
+                return
+
             augmented_instruction = await client.augment_prompt(
                 request.instruction, ITERATION_AUGMENTATION_SYSTEM_PROMPT
             )
             logger.info(f"Augmented iteration for {request.app_id}")
 
             try:
-                success, theme_color = await iterate_app_pipeline(
+                success, theme_color, new_version = await iterate_app_pipeline(
                     client, augmented_instruction, request.app_id, app["name"],
-                    on_status=on_status
+                    on_status=on_status, current_version=current_version
                 )
             except Exception as e:
                 logger.error(f"Iterate pipeline exception for {request.app_id}: {e}")
@@ -187,10 +198,16 @@ async def iterate_app(request: IterateRequest, db=Depends(get_db)):
                 pipeline_db.row_factory = aiosqlite.Row
                 pipeline_service = AppService(pipeline_db)
                 await pipeline_service.update_theme(request.app_id, theme_color)
+                await pipeline_db.execute(
+                    "UPDATE apps SET version = ? WHERE id = ?",
+                    (new_version, request.app_id),
+                )
+                await pipeline_db.commit()
 
             await queue.put({"type": "complete", "data": {
                 "id": request.app_id, "name": app["name"],
                 "description": request.instruction, "theme_color": theme_color,
+                "version": new_version,
             }})
         except Exception as e:
             logger.error(f"Iterate stream error: {e}")
@@ -203,7 +220,7 @@ async def iterate_app(request: IterateRequest, db=Depends(get_db)):
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=300)
                     yield _sse_event(event)
-                    if event["type"] in ("complete", "error"):
+                    if event["type"] in ("complete", "error", "chat_response"):
                         break
                 except asyncio.TimeoutError:
                     yield _sse_event({"type": "error", "message": "Taking too long — try a simpler change"})

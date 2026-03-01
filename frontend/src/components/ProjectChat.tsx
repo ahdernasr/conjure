@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { ArrowLeft, ExternalLink, Download, AlertCircle, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import type { App } from "@/types/app";
-import { iterateApp } from "@/api/generate";
+import { iterateApp, isChatResponse } from "@/api/generate";
 import { getMessages, addMessage, type ChatMessage } from "@/api/apps";
 import PhonePreview from "@/components/PhonePreview";
 import ChatInput from "@/components/ChatInput";
@@ -19,8 +19,8 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
   const [isIterating, setIsIterating] = useState(false);
   const [traceMessages, setTraceMessages] = useState<string[]>([]);
   const [iframeKey, setIframeKey] = useState(0);
-  const [version, setVersion] = useState(1);
-  const [activeVersion, setActiveVersion] = useState(1);
+  const [version, setVersion] = useState(app.version || 1);
+  const [activeVersion, setActiveVersion] = useState(app.version || 1);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -30,12 +30,6 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
     getMessages(app.id).then((msgs) => {
       if (cancelled) return;
       setMessages(msgs);
-      // Derive version from the highest version in saved messages
-      const maxVersion = msgs.reduce((max, m) => Math.max(max, m.version ?? 0), 0);
-      if (maxVersion > 0) {
-        setVersion(maxVersion);
-        setActiveVersion(maxVersion);
-      }
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [app.id]);
@@ -60,19 +54,31 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
     setTraceMessages([]);
     setError(null);
     try {
-      await iterateApp(app.id, instruction, onTrace);
-      const newVersion = version + 1;
-      setVersion(newVersion);
-      setActiveVersion(newVersion);
-      setIframeKey((prev) => prev + 1);
+      const result = await iterateApp(app.id, instruction, onTrace);
 
-      const assistantContent = `Done — version ${newVersion}`;
-      const assistantMsg: ChatMessage = { id: Date.now() + 1, role: "assistant", content: assistantContent, version: newVersion };
-      setMessages((prev) => [...prev, assistantMsg]);
+      if (isChatResponse(result)) {
+        // Text-only response — no version bump, no iframe reload
+        const assistantMsg: ChatMessage = { id: Date.now() + 1, role: "assistant", content: result.message, version: null };
+        setMessages((prev) => [...prev, assistantMsg]);
 
-      // Persist both messages to backend
-      addMessage(app.id, "user", instruction, newVersion).catch(() => {});
-      addMessage(app.id, "assistant", assistantContent, newVersion).catch(() => {});
+        // Persist both messages without a version
+        await addMessage(app.id, "user", instruction).catch(() => {});
+        await addMessage(app.id, "assistant", result.message).catch(() => {});
+      } else {
+        // Code change — bump version and reload iframe
+        const newVersion = result.version ?? version + 1;
+        setVersion(newVersion);
+        setActiveVersion(newVersion);
+        setIframeKey((prev) => prev + 1);
+
+        const assistantContent = `Done — version ${newVersion}`;
+        const assistantMsg: ChatMessage = { id: Date.now() + 1, role: "assistant", content: assistantContent, version: newVersion };
+        setMessages((prev) => [...prev, assistantMsg]);
+
+        // Persist both messages to backend (sequential to preserve order)
+        await addMessage(app.id, "user", instruction, newVersion).catch(() => {});
+        await addMessage(app.id, "assistant", assistantContent, newVersion).catch(() => {});
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Iteration failed");
     } finally {
@@ -167,14 +173,14 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
         {/* Left panel: phone preview (desktop — sticky) */}
         <div className="hidden md:block md:w-[45%] md:shrink-0 border-r border-border">
           <div className="sticky top-0 h-[calc(100dvh-49px)] flex flex-col justify-center px-10">
-            <PhonePreview appId={app.id} iframeKey={iframeKey} />
+            <PhonePreview appId={app.id} iframeKey={iframeKey} activeVersion={activeVersion} latestVersion={version} />
             {versionSwitcher}
           </div>
         </div>
 
         {/* Mobile phone preview */}
         <div className="md:hidden px-6 py-5 border-b border-border">
-          <PhonePreview appId={app.id} iframeKey={iframeKey} />
+          <PhonePreview appId={app.id} iframeKey={iframeKey} activeVersion={activeVersion} latestVersion={version} />
           {versionSwitcher}
         </div>
 

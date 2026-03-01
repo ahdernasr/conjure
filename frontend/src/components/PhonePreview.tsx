@@ -1,6 +1,8 @@
 interface Props {
   appId: string;
   iframeKey?: number;
+  activeVersion?: number;
+  latestVersion?: number;
 }
 
 const PHONE_WIDTH = 396; // 32% bigger than 300
@@ -11,11 +13,15 @@ const SCALE = PHONE_WIDTH / IFRAME_WIDTH;
 const TOP_INSET = 44;
 const BOTTOM_INSET = 34;
 
-export default function PhonePreview({ appId, iframeKey = 0 }: Props) {
+export default function PhonePreview({ appId, iframeKey = 0, activeVersion, latestVersion }: Props) {
   const phoneHeight = Math.round(PHONE_WIDTH * (19.5 / 9));
   // iframe height = visible safe area (between insets) in unscaled pixels
   // so 100dvh inside the iframe matches what's actually shown
   const IFRAME_HEIGHT = Math.round((phoneHeight - TOP_INSET - BOTTOM_INSET) / SCALE);
+
+  const src = activeVersion && latestVersion && activeVersion < latestVersion
+    ? `/apps/${appId}/_versions/${activeVersion}/`
+    : `/apps/${appId}/`;
 
   return (
     <div className="mx-auto w-full" style={{ maxWidth: `${PHONE_WIDTH}px` }}>
@@ -33,7 +39,7 @@ export default function PhonePreview({ appId, iframeKey = 0 }: Props) {
         >
           <iframe
             key={iframeKey}
-            src={`/apps/${appId}/`}
+            src={src}
             className="border-0 absolute top-0 left-0"
             style={{
               width: `${IFRAME_WIDTH}px`,

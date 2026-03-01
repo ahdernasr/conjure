@@ -45,4 +45,10 @@ async def init_db():
                 FOREIGN KEY (app_id) REFERENCES apps(id) ON DELETE CASCADE
             )
         """)
+        # Migration: add version column to existing apps
+        try:
+            await db.execute("ALTER TABLE apps ADD COLUMN version INTEGER DEFAULT 1")
+        except Exception:
+            pass  # Column already exists
+
         await db.commit()

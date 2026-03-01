@@ -6,6 +6,7 @@ export interface App {
   created_at: string;
   updated_at: string;
   status: string;
+  version: number;
 }
 
 export interface AppListResponse {

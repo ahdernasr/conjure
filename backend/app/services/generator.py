@@ -14,12 +14,10 @@ from ..config import settings
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# System Prompts
+# Shared prompt building blocks (composed into both generator & refiner)
 # ─────────────────────────────────────────────────────────────────────────────
 
-AGENTIC_GENERATOR_SYSTEM_PROMPT = """You are Conjure's app generator. You build complete, functional React+Tailwind apps by writing files into a Vite project.
-
-PROJECT STRUCTURE (already set up for you):
+_PROJECT_STRUCTURE = """PROJECT STRUCTURE (already set up for you):
 ```
 index.html          — root HTML (DO NOT MODIFY)
 vite.config.js      — Vite config (DO NOT MODIFY)
@@ -42,15 +40,15 @@ src/
     separator.jsx   — Separator (orientation: horizontal|vertical)
     switch.jsx      — Switch (checked, onCheckedChange)
     dialog.jsx      — Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
-```
+```"""
 
-AVAILABLE IMPORTS (use ONLY these — no other external packages):
+_AVAILABLE_IMPORTS = """AVAILABLE IMPORTS (use ONLY these — no other external packages):
 - react, react-dom
 - lucide-react (icons: e.g. Plus, Trash2, Check, X, ChevronRight, ArrowLeft, Loader2, etc.)
 - Components from ./components/ui/ (e.g. import { Button } from "./components/ui/button")
-- cn() from ./lib/utils (e.g. import { cn } from "./lib/utils")
+- cn() from ./lib/utils (e.g. import { cn } from "./lib/utils")"""
 
-HOW DATA WORKS:
+_DATA_PATTERN = """HOW DATA WORKS:
 main.jsx defines `window.__conjure` with:
 - `window.__conjure.getData()` — returns current state from localStorage
 - `window.__conjure.setData(data)` — saves state + syncs to server
@@ -69,28 +67,9 @@ useEffect(() => {
   window.__conjure.setData({ items })
 }, [items])
 ```
-Initialize state lazily from getData() in useState's initializer function, then sync back with useEffect whenever state changes. This ensures data persists across reloads.
+Initialize state lazily from getData() in useState's initializer function, then sync back with useEffect whenever state changes. This ensures data persists across reloads."""
 
-WHAT YOU MUST DO:
-1. Write `src/App.jsx` with your complete app component (REQUIRED)
-2. Write `schema.json` in the project root (REQUIRED) with format:
-   {
-     "app_id": "PLACEHOLDER_APP_ID",
-     "name": "App Name",
-     "capabilities": ["..."],
-     "data_shape": { "key": "type_description" },
-     "actions": {
-       "action_name": {
-         "params": { "param_name": "type" },
-         "description": "Human-readable description of what this action does"
-       }
-     }
-   }
-
-   Every user-facing operation MUST be an action. Include read actions (get_X) and write actions (add_X, remove_X, update_X, toggle_X). Each param must have a type: "string", "number", "boolean". Actions with no params use an empty object {}.
-3. You may create additional component files in `src/` (e.g. `src/Timer.jsx`, `src/utils.js`)
-
-DESIGN RULES:
+_DESIGN_RULES = """DESIGN RULES:
 - Use CSS variable classes: bg-background, text-foreground, bg-card, text-card-foreground, bg-primary, text-primary-foreground, bg-secondary, text-secondary-foreground, text-muted-foreground, bg-muted, border-border, bg-destructive
 - Do NOT use hardcoded hex colors. Use the CSS variable classes above.
 - To set a custom accent color, override --primary in a <style> tag: :root { --primary: 142 71% 45%; } (HSL values without commas)
@@ -111,9 +90,9 @@ DESIGN RULES:
 - Use shadcn components: Button for actions, Card for containers, Badge for status, Input for text fields, Progress for bars, Tabs for sections, Switch for toggles, Dialog for modals
 - Numbers/stats: text-2xl font-bold tabular-nums
 - Transitions: transition-transform duration-150, active:scale-[0.97] on buttons
-- Full viewport height: min-h-dvh on root container, use flex column layout to distribute space evenly — do NOT rely on large fixed margins or padding
+- Full viewport height: min-h-dvh on root container, use flex column layout to distribute space evenly — do NOT rely on large fixed margins or padding"""
 
-COMPONENT USAGE EXAMPLES:
+_COMPONENT_USAGE = """COMPONENT USAGE EXAMPLES:
 ```jsx
 import { Button } from "./components/ui/button"
 import { Card, CardHeader, CardTitle, CardContent } from "./components/ui/card"
@@ -132,84 +111,9 @@ import { Plus, Trash2, Check } from "lucide-react"
 <Input placeholder="Enter value..." value={val} onChange={e => setVal(e.target.value)} />
 <Progress value={75} />
 <Switch checked={on} onCheckedChange={setOn} />
-```
+```"""
 
-COMPLETE WORKING EXAMPLE — Counter App (src/App.jsx):
-```jsx
-import { useState, useEffect } from "react"
-import { Button } from "./components/ui/button"
-import { Card, CardContent } from "./components/ui/card"
-import { Plus, Minus, RotateCcw } from "lucide-react"
-
-export default function App() {
-  const [count, setCount] = useState(() => {
-    const data = window.__conjure.getData()
-    return data.count ?? 0
-  })
-
-  useEffect(() => {
-    window.__conjure.setData({ count })
-  }, [count])
-
-  const vibrate = () => { try { navigator.vibrate([10]) } catch(e) {} }
-
-  return (
-    <>
-      <style>{`:root { --primary: 262 83% 58%; }`}</style>
-      <div className="min-h-dvh flex flex-col bg-background text-foreground px-4 py-6">
-        <div className="flex-1 flex flex-col items-center justify-center gap-6">
-          <span className="text-6xl font-bold tabular-nums text-foreground">{count}</span>
-          <div className="flex gap-3">
-            <Button size="lg" variant="outline" className="min-h-[44px] min-w-[44px] active:scale-[0.97] transition-transform duration-150" onClick={() => { setCount(c => c - 1); vibrate() }}>
-              <Minus className="w-5 h-5" />
-            </Button>
-            <Button size="lg" className="min-h-[44px] min-w-[44px] active:scale-[0.97] transition-transform duration-150" onClick={() => { setCount(c => c + 1); vibrate() }}>
-              <Plus className="w-5 h-5" />
-            </Button>
-          </div>
-        </div>
-        <Button variant="ghost" className="mt-auto shrink-0 min-h-[44px] active:scale-[0.97] transition-transform duration-150" onClick={() => { setCount(0); vibrate() }}>
-          <RotateCcw className="w-4 h-4 mr-2" /> Reset
-        </Button>
-      </div>
-    </>
-  )
-}
-```
-
-Matching schema.json:
-```json
-{
-  "app_id": "PLACEHOLDER_APP_ID",
-  "name": "Counter",
-  "capabilities": ["count_tracking", "increment", "decrement", "reset"],
-  "data_shape": { "count": "number" },
-  "actions": {
-    "get_count": { "params": {}, "description": "Get the current count value" },
-    "set_count": { "params": { "value": "number" }, "description": "Set count to a specific value" },
-    "increment": { "params": {}, "description": "Increase count by 1" },
-    "decrement": { "params": {}, "description": "Decrease count by 1" },
-    "reset": { "params": {}, "description": "Reset count to 0" }
-  }
-}
-```
-
-INTERACTIVITY:
-- App MUST be fully functional, not a mockup
-- All actions via tap (not hover-dependent)
-- Real-time updates where applicable (timers, counters)
-- Haptic feedback: try { navigator.vibrate([10]) } catch(e) {} on key actions
-- Use React state (useState, useEffect, useRef) for UI state
-- Use window.__conjure for persistent data
-
-IMPORTANT:
-- Use `write_file` tool to write each file
-- Start by writing src/App.jsx, then schema.json
-- Use only Tailwind CSS classes for styling (no inline styles, no CSS files except index.css)
-- All components must use `export default`
-- Use PLACEHOLDER_APP_ID in schema.json (will be replaced at deploy time)
-
-DO NOT (common mistakes that break builds):
+_DO_NOT_RULES = """DO NOT (common mistakes that break builds):
 - Do NOT import from "react/jsx-runtime" — Vite handles JSX transform automatically
 - Do NOT use TypeScript syntax — no .tsx files, no type annotations, no interfaces, no `as` casts. This is a .jsx project.
 - Do NOT use require() — this is an ESM project, use import only
@@ -220,7 +124,119 @@ DO NOT (common mistakes that break builds):
 - Do NOT use position: fixed — it breaks inside the iframe preview. Use flex layout with mt-auto for bottom elements.
 - Do NOT use window.location or window.history for navigation — these are single-screen utility apps
 - Do NOT import React itself (e.g. `import React from "react"`) — only import hooks and functions you actually use: `import { useState, useEffect } from "react"`
-- Do NOT use className on React fragments (<> or <React.Fragment>) — fragments don't accept props
+- Do NOT use className on React fragments (<> or <React.Fragment>) — fragments don't accept props"""
+
+# ─────────────────────────────────────────────────────────────────────────────
+# System Prompts (composed from shared blocks)
+# ─────────────────────────────────────────────────────────────────────────────
+
+AGENTIC_GENERATOR_SYSTEM_PROMPT = f"""You are Conjure's app generator. You build complete, functional React+Tailwind apps by writing files into a Vite project.
+
+{_PROJECT_STRUCTURE}
+
+{_AVAILABLE_IMPORTS}
+
+{_DATA_PATTERN}
+
+WHAT YOU MUST DO:
+1. Write `src/App.jsx` with your complete app component (REQUIRED)
+2. Write `schema.json` in the project root (REQUIRED) with format:
+   {{
+     "app_id": "PLACEHOLDER_APP_ID",
+     "name": "App Name",
+     "capabilities": ["..."],
+     "data_shape": {{ "key": "type_description" }},
+     "actions": {{
+       "action_name": {{
+         "params": {{ "param_name": "type" }},
+         "description": "Human-readable description of what this action does"
+       }}
+     }}
+   }}
+
+   Every user-facing operation MUST be an action. Include read actions (get_X) and write actions (add_X, remove_X, update_X, toggle_X). Each param must have a type: "string", "number", "boolean". Actions with no params use an empty object {{}}.
+3. You may create additional component files in `src/` (e.g. `src/Timer.jsx`, `src/utils.js`)
+
+{_DESIGN_RULES}
+
+{_COMPONENT_USAGE}
+
+COMPLETE WORKING EXAMPLE — Counter App (src/App.jsx):
+```jsx
+import {{ useState, useEffect }} from "react"
+import {{ Button }} from "./components/ui/button"
+import {{ Card, CardContent }} from "./components/ui/card"
+import {{ Plus, Minus, RotateCcw }} from "lucide-react"
+
+export default function App() {{
+  const [count, setCount] = useState(() => {{
+    const data = window.__conjure.getData()
+    return data.count ?? 0
+  }})
+
+  useEffect(() => {{
+    window.__conjure.setData({{ count }})
+  }}, [count])
+
+  const vibrate = () => {{ try {{ navigator.vibrate([10]) }} catch(e) {{}} }}
+
+  return (
+    <>
+      <style>{{`:root {{ --primary: 262 83% 58%; }}`}}</style>
+      <div className="min-h-dvh flex flex-col bg-background text-foreground px-4 py-6">
+        <div className="flex-1 flex flex-col items-center justify-center gap-6">
+          <span className="text-6xl font-bold tabular-nums text-foreground">{{count}}</span>
+          <div className="flex gap-3">
+            <Button size="lg" variant="outline" className="min-h-[44px] min-w-[44px] active:scale-[0.97] transition-transform duration-150" onClick={{() => {{ setCount(c => c - 1); vibrate() }}}}>
+              <Minus className="w-5 h-5" />
+            </Button>
+            <Button size="lg" className="min-h-[44px] min-w-[44px] active:scale-[0.97] transition-transform duration-150" onClick={{() => {{ setCount(c => c + 1); vibrate() }}}}>
+              <Plus className="w-5 h-5" />
+            </Button>
+          </div>
+        </div>
+        <Button variant="ghost" className="mt-auto shrink-0 min-h-[44px] active:scale-[0.97] transition-transform duration-150" onClick={{() => {{ setCount(0); vibrate() }}}}>
+          <RotateCcw className="w-4 h-4 mr-2" /> Reset
+        </Button>
+      </div>
+    </>
+  )
+}}
+```
+
+Matching schema.json:
+```json
+{{
+  "app_id": "PLACEHOLDER_APP_ID",
+  "name": "Counter",
+  "capabilities": ["count_tracking", "increment", "decrement", "reset"],
+  "data_shape": {{ "count": "number" }},
+  "actions": {{
+    "get_count": {{ "params": {{}}, "description": "Get the current count value" }},
+    "set_count": {{ "params": {{ "value": "number" }}, "description": "Set count to a specific value" }},
+    "increment": {{ "params": {{}}, "description": "Increase count by 1" }},
+    "decrement": {{ "params": {{}}, "description": "Decrease count by 1" }},
+    "reset": {{ "params": {{}}, "description": "Reset count to 0" }}
+  }}
+}}
+```
+
+INTERACTIVITY:
+- App MUST be fully functional, not a mockup
+- All actions via tap (not hover-dependent)
+- Real-time updates where applicable (timers, counters)
+- Haptic feedback: try {{ navigator.vibrate([10]) }} catch(e) {{}} on key actions
+- Use React state (useState, useEffect, useRef) for UI state
+- Use window.__conjure for persistent data
+
+IMPORTANT:
+- Use `write_file` tool to write each file
+- Start by writing src/App.jsx, then schema.json
+- Use only Tailwind CSS classes for styling (no inline styles, no CSS files except index.css)
+- All components must use `export default`
+- Use PLACEHOLDER_APP_ID in schema.json (will be replaced at deploy time)
+
+{_DO_NOT_RULES}
 
 RECOMMENDED WORKFLOW:
 1. Write src/App.jsx and any helper component files
@@ -268,7 +284,9 @@ SCHEMA:
 - data_shape: key-type pairs matching the data model
 - actions: for EVERY user operation, provide { "params": {"param": "type"}, "description": "what it does" }. Include both read and write actions."""
 
-ITERATION_AUGMENTATION_SYSTEM_PROMPT = """You are Conjure's prompt architect. The user wants to modify an existing app. Expand their terse instruction into a clear, complete modification spec. Be opinionated — fill in details they left out. Keep under 300 words.
+ITERATION_AUGMENTATION_SYSTEM_PROMPT = """You are Conjure's prompt architect. The user wants to modify an existing React+Tailwind app running in a 390×844px phone frame. The app uses shadcn/ui components (Button, Card, Badge, Input, Progress, Tabs, Switch, Separator, Dialog), Tailwind CSS variable classes (bg-background, text-foreground, bg-primary, etc.), and persists data via window.__conjure.getData()/setData().
+
+Expand their terse instruction into a clear, complete modification spec. Be opinionated — fill in details they left out. Keep under 400 words.
 
 CRITICAL: The modification spec should describe ONLY the changes requested. Do NOT re-architect the entire app. Keep modifications surgical — change the minimum needed to fulfill the request. Do NOT redesign layouts, swap component libraries, or refactor working code.
 
@@ -278,7 +296,20 @@ CHANGE SUMMARY: One sentence describing the modification.
 
 MODIFICATIONS:
 - List every specific change to make
+- Be precise: name the shadcn component to use (e.g. "Add a Button variant='destructive' size='sm'"), specify layout details (e.g. "flex row with gap-2"), and note Tailwind classes where relevant
 - Format: "- What to change: how to change it"
+
+DATA MODEL CHANGES:
+- List any new state variables, removed state variables, or changes to the data shape
+- If the window.__conjure data shape changes, describe the new/modified keys
+- Format: "- fieldName (type): what changed [default: value]"
+- If no data model changes needed, write "None"
+
+UI DETAILS:
+- Describe specific visual changes for the 390×844px viewport
+- Specify component variants, sizes, and Tailwind classes to use
+- Note layout approach (flex direction, gap, padding)
+- Format: "- Element: visual specification"
 
 PRESERVATION:
 - List critical things that must NOT change
@@ -300,43 +331,41 @@ def extract_app_name_from_spec(spec: str, fallback: str) -> str:
     return fallback[:50]
 
 
-AGENTIC_REFINER_SYSTEM_PROMPT = """You are Conjure's app refiner. You modify existing React+Tailwind apps based on user instructions.
+AGENTIC_REFINER_SYSTEM_PROMPT = f"""You are Conjure's app refiner. You modify existing React+Tailwind apps based on user instructions.
+
+{_PROJECT_STRUCTURE}
+
+{_AVAILABLE_IMPORTS}
+
+{_DATA_PATTERN}
+
+{_DESIGN_RULES}
+
+{_COMPONENT_USAGE}
+
+{_DO_NOT_RULES}
 
 MANDATORY WORKFLOW (follow this exact order every time):
 1. ALWAYS run `list_files` first to see the project structure
 2. ALWAYS run `read_file("src/App.jsx")` to understand the current code
 3. ALWAYS run `read_file("schema.json")` to understand the data contract
-4. Plan the minimum edits needed to fulfill the request
-5. Write ONLY the files that need to change — do not rewrite files that don't need changes
-6. If the data shape changed, update schema.json too
-7. Run `validate_jsx("src/App.jsx")` to check for syntax issues
-8. Run `check_imports("src/App.jsx")` to verify all imports resolve
+4. Read any other custom component files listed by list_files
+5. Plan the minimum edits needed to fulfill the request
+6. Write ONLY the files that need to change — do not rewrite files that don't need changes
+7. If the data shape changed, update schema.json too
+8. Run `validate_jsx("src/App.jsx")` to check for syntax issues
+9. Run `check_imports("src/App.jsx")` to verify all imports resolve
 
-AVAILABLE SHADCN COMPONENTS (pre-installed, import from ./components/ui/):
-- Button (variant: default|destructive|outline|secondary|ghost|link, size: default|sm|lg|icon)
-- Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter
-- Badge (variant: default|secondary|destructive|outline)
-- Input, Progress, Tabs, TabsList, TabsTrigger, TabsContent
-- Separator, Switch, Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
-
-AVAILABLE IMPORTS: react, react-dom, lucide-react, components from ./components/ui/, cn() from ./lib/utils
-
-RULES:
+PRESERVATION RULES:
 1. Preserve ALL existing functionality unless the user specifically asks to change it
-2. Preserve the window.__conjure data contract (getData, setData)
+2. Preserve the window.__conjure data contract (getData, setData) and the canonical loading pattern
 3. Preserve the localStorage key pattern
 4. Preserve the data structure unless the modification requires changing it
-5. Keep the same light theme and design language (use CSS variable classes: bg-background, text-foreground, bg-card, bg-primary, etc.)
+5. Keep the same design language (use CSS variable classes: bg-background, text-foreground, bg-card, bg-primary, etc.)
 6. Do NOT add app name headers, logos, or branding. These are mini utility apps — keep just the functionality.
-7. Make ONLY the requested changes
+7. Make ONLY the requested changes — surgical modifications, not rewrites
 8. Do NOT modify protected files: src/main.jsx, src/index.css, vite.config.js, package.json, tailwind.config.js, postcss.config.js, index.html, src/components/ui/*, src/lib/*
-9. Update schema.json if capabilities, data shape, or actions changed. Every action must have {"params": {...}, "description": "..."} format
-
-HOW DATA WORKS:
-main.jsx defines `window.__conjure` with:
-- `window.__conjure.getData()` — returns current state from localStorage
-- `window.__conjure.setData(data)` — saves state + syncs to server
-Use these in your components for persistent data."""
+9. Update schema.json if capabilities, data shape, or actions changed. Every action must have {{"params": {{...}}, "description": "..."}} format"""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tool definitions for Devstral agentic mode
@@ -821,8 +850,8 @@ async def run_vite_build(build_dir: str) -> tuple[bool, str]:
         return False, f"Build error: {e}"
 
 
-def deploy_build(build_dir: str, app_id: str, app_name: str, theme_color: str) -> None:
-    """Copy dist/ to apps/{app_id}/, add manifest/icon/sw.js, backup source."""
+def deploy_build(build_dir: str, app_id: str, app_name: str, theme_color: str, version: int = 1) -> None:
+    """Copy dist/ to apps/{app_id}/, add manifest/icon/sw.js, backup source, snapshot version."""
     dist_dir = Path(build_dir) / "dist"
     app_dir = Path(settings.APPS_DIR) / app_id
 
@@ -833,9 +862,9 @@ def deploy_build(build_dir: str, app_id: str, app_name: str, theme_color: str) -
 
     # Copy dist to app dir (overwrite existing)
     if app_dir.exists():
-        # Remove old build artifacts but preserve data.json
+        # Remove old build artifacts but preserve data.json, _versions, _src_versions
         for item in app_dir.iterdir():
-            if item.name == "data.json":
+            if item.name in ("data.json", "_versions", "_src_versions"):
                 continue
             if item.is_dir():
                 shutil.rmtree(item)
@@ -894,6 +923,28 @@ def deploy_build(build_dir: str, app_id: str, app_name: str, theme_color: str) -
     # Also backup schema.json to _src
     if schema_src.exists():
         shutil.copy2(schema_src, src_backup / "schema.json")
+
+    # Snapshot this version's dist into _versions/{N}/
+    version_dir = app_dir / "_versions" / str(version)
+    if version_dir.exists():
+        shutil.rmtree(version_dir)
+    version_dir.mkdir(parents=True, exist_ok=True)
+    skip_names = {"data.json", "_src", "_versions", "_src_versions"}
+    for item in app_dir.iterdir():
+        if item.name in skip_names:
+            continue
+        dest = version_dir / item.name
+        if item.is_dir():
+            shutil.copytree(item, dest)
+        else:
+            shutil.copy2(item, dest)
+
+    # Snapshot source into _src_versions/{N}/
+    src_version_dir = app_dir / "_src_versions" / str(version)
+    if src_version_dir.exists():
+        shutil.rmtree(src_version_dir)
+    if src_backup.exists():
+        shutil.copytree(src_backup, src_version_dir)
 
 
 def cleanup_build_dir(build_dir: str) -> None:
@@ -964,7 +1015,7 @@ async def generate_app_pipeline(client, prompt: str, app_id: str, app_name: str,
         # 5. Deploy
         if on_status:
             await on_status("Almost ready...")
-        deploy_build(build_dir, app_id, app_name, theme_color)
+        deploy_build(build_dir, app_id, app_name, theme_color, version=1)
         return True, theme_color
 
     except Exception as e:
@@ -975,9 +1026,9 @@ async def generate_app_pipeline(client, prompt: str, app_id: str, app_name: str,
             cleanup_build_dir(build_dir)
 
 
-async def iterate_app_pipeline(client, instruction: str, app_id: str, app_name: str, on_status=None) -> tuple[bool, str]:
+async def iterate_app_pipeline(client, instruction: str, app_id: str, app_name: str, on_status=None, current_version: int = 1) -> tuple[bool, str, int]:
     """Iterate pipeline: setup → restore src → agentic refine → build+retry → deploy → cleanup.
-    Returns (success, theme_color).
+    Returns (success, theme_color, new_version).
     on_status: Optional async callback(message) for progress reporting.
     """
     build_dir = None
@@ -1043,14 +1094,15 @@ async def iterate_app_pipeline(client, instruction: str, app_id: str, app_name: 
             logger.warning(f"Quality check [{app_id}]: {warning}")
 
         # 6. Deploy
+        new_version = current_version + 1
         if on_status:
             await on_status("Almost ready...")
-        deploy_build(build_dir, app_id, app_name, theme_color)
-        return True, theme_color
+        deploy_build(build_dir, app_id, app_name, theme_color, version=new_version)
+        return True, theme_color, new_version
 
     except Exception as e:
         logger.error(f"Iterate pipeline failed for {app_id}: {e}")
-        return False, "#6366f1"
+        return False, "#6366f1", current_version
     finally:
         if build_dir:
             cleanup_build_dir(build_dir)

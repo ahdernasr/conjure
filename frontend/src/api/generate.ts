@@ -3,13 +3,25 @@ export interface GenerateResponse {
   name: string;
   description: string;
   theme_color: string;
+  version?: number;
+}
+
+export interface ChatOnlyResponse {
+  type: "chat_response";
+  message: string;
+}
+
+export type IterateResult = GenerateResponse | ChatOnlyResponse;
+
+export function isChatResponse(result: IterateResult): result is ChatOnlyResponse {
+  return "type" in result && result.type === "chat_response";
 }
 
 async function readSSEStream(
   url: string,
   body: object,
   onTrace?: (message: string) => void,
-): Promise<GenerateResponse> {
+): Promise<IterateResult> {
   const resp = await fetch(`/api${url}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -47,6 +59,8 @@ async function readSSEStream(
 
         if (event.type === "status" || event.type === "tool") {
           onTrace?.(event.message);
+        } else if (event.type === "chat_response") {
+          return { type: "chat_response", message: event.message } as ChatOnlyResponse;
         } else if (event.type === "complete") {
           return event.data as GenerateResponse;
         } else if (event.type === "error") {
@@ -66,18 +80,19 @@ export async function generateApp(
   goldenId?: string,
   onTrace?: (message: string) => void,
 ): Promise<GenerateResponse> {
+  // Generation endpoint never returns chat_response, safe to cast
   return readSSEStream(
     "/generate/",
     { prompt, golden_id: goldenId || null },
     onTrace,
-  );
+  ) as Promise<GenerateResponse>;
 }
 
 export async function iterateApp(
   appId: string,
   instruction: string,
   onTrace?: (message: string) => void,
-): Promise<GenerateResponse> {
+): Promise<IterateResult> {
   return readSSEStream(
     "/generate/iterate",
     { app_id: appId, instruction },
