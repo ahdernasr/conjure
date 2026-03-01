@@ -8,14 +8,14 @@ const IFRAME_WIDTH = 390;
 const SCALE = PHONE_WIDTH / IFRAME_WIDTH;
 
 // Simulate real iPhone bezels — app content starts below status bar, ends above home indicator
-const TOP_BEZEL = 44; // status bar + dynamic island safe area
+const TOP_BEZEL = 36; // status bar + dynamic island safe area
 const BOTTOM_BEZEL = 28; // home indicator area
 
 export default function PhonePreview({ appId, iframeKey = 0 }: Props) {
   return (
-    <div className="mx-auto" style={{ maxWidth: `${PHONE_WIDTH}px` }}>
+    <div className="mx-auto w-full" style={{ maxWidth: `${PHONE_WIDTH}px` }}>
       <div
-        className="relative rounded-[2.5rem] border border-border bg-white shadow-sm"
+        className="relative w-full rounded-[2.5rem] border border-border bg-white shadow-sm"
         style={{ aspectRatio: "9 / 19.5" }}
       >
         {/* Dynamic Island */}

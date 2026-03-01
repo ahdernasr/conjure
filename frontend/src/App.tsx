@@ -127,6 +127,8 @@ export default function App() {
           loading={appsLoading}
           onSelectApp={handleSelectApp}
           onBack={() => setView("home")}
+          onDeleted={refreshApps}
+          onAddApp={() => setView("home")}
         />
 
       ) : view === "create" ? (
@@ -176,7 +178,7 @@ export default function App() {
         <>
           {/* Header */}
           <header className="flex items-center justify-between px-6 py-4">
-            <h1 className="text-lg font-semibold tracking-tight">Conjure</h1>
+            <h1 className="text-xl font-bold tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif", letterSpacing: '-0.02em' }}>Conjure</h1>
             {apps.length > 0 && (
               <button
                 onClick={() => setView("apps")}
@@ -246,7 +248,7 @@ export default function App() {
                     <Mic className="w-8 h-8" />
                   )}
                   {isRecording && (
-                    <span className="absolute inset-0 rounded-full border-2 border-red-300 animate-ping" />
+                    <span className="absolute inset-0 rounded-full border-2 border-red-300 animate-ping pointer-events-none" />
                   )}
                 </button>
 

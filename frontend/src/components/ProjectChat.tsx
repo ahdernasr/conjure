@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { ArrowLeft, ExternalLink, Download, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, ExternalLink, Download, AlertCircle, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import type { App } from "@/types/app";
 import { iterateApp } from "@/api/generate";
 import PhonePreview from "@/components/PhonePreview";
@@ -74,17 +74,40 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
   const handleOpen = () => window.open(`/apps/${app.id}/`, "_blank");
 
   const handleVersionTap = (v: number) => {
+    if (v < 1 || v > version) return;
     setActiveVersion(v);
     setIframeKey((prev) => prev + 1);
   };
 
-  const versions = Array.from({ length: version }, (_, i) => i + 1);
   const color = app.theme_color || "#6366f1";
 
+  // Version switcher — shared between mobile and desktop
+  const versionSwitcher = version > 1 && (
+    <div className="flex items-center justify-center gap-3 mt-4">
+      <button
+        onClick={() => handleVersionTap(activeVersion - 1)}
+        disabled={activeVersion <= 1}
+        className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors disabled:opacity-30 disabled:pointer-events-none"
+      >
+        <ChevronLeft className="w-4 h-4" />
+      </button>
+      <span className="text-sm text-muted-foreground tabular-nums">
+        Version {activeVersion} of {version}
+      </span>
+      <button
+        onClick={() => handleVersionTap(activeVersion + 1)}
+        disabled={activeVersion >= version}
+        className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors disabled:opacity-30 disabled:pointer-events-none"
+      >
+        <ChevronRight className="w-4 h-4" />
+      </button>
+    </div>
+  );
+
   return (
-    <div className="flex flex-col min-h-[100dvh]">
-      {/* Header */}
-      <header className="flex items-center gap-3 px-6 py-3 border-b border-border">
+    <div className="flex flex-col h-[100dvh] overflow-hidden">
+      {/* Header — full width */}
+      <header className="flex items-center gap-3 px-6 py-3 border-b border-border shrink-0">
         <Button
           variant="ghost"
           size="icon"
@@ -94,7 +117,6 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
           <ArrowLeft className="w-4 h-4" />
         </Button>
 
-        {/* App identity */}
         <div className="flex items-center gap-2.5 flex-1 min-w-0">
           <div
             className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold shrink-0"
@@ -110,7 +132,6 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
           </div>
         </div>
 
-        {/* Quick actions */}
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
@@ -131,76 +152,76 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
         </div>
       </header>
 
-      {/* Pinned preview section */}
-      <div className="px-6 py-5 border-b border-border">
-        <PhonePreview appId={app.id} iframeKey={iframeKey} />
-
-        {/* Version pills */}
-        {versions.length > 1 && (
-          <div className="flex items-center justify-center gap-1.5 mt-4">
-            {versions.map((v) => (
-              <button
-                key={v}
-                onClick={() => handleVersionTap(v)}
-                className={`flex items-center justify-center transition-all duration-200 ${
-                  v === activeVersion
-                    ? "w-8 h-8 rounded-full bg-foreground text-background text-xs font-bold"
-                    : "w-6 h-6 rounded-full bg-secondary text-muted-foreground text-[10px] hover:bg-secondary/80"
-                }`}
-              >
-                {v}
-              </button>
-            ))}
+      {/* Body — split on desktop, stacked on mobile */}
+      <div className="flex-1 flex flex-col md:flex-row min-h-0">
+        {/* Left panel: phone preview (desktop — sticky) */}
+        <div className="hidden md:block md:w-[45%] md:shrink-0 border-r border-border">
+          <div className="sticky top-0 h-[calc(100dvh-49px)] flex flex-col justify-center px-10">
+            <PhonePreview appId={app.id} iframeKey={iframeKey} />
+            {versionSwitcher}
           </div>
-        )}
-      </div>
+        </div>
 
-      {/* Scrollable conversation */}
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-y-auto px-6 py-4 space-y-3"
-      >
-        {messages.map((msg, i) => (
+        {/* Mobile phone preview */}
+        <div className="md:hidden px-6 py-5 border-b border-border">
+          <PhonePreview appId={app.id} iframeKey={iframeKey} />
+          {versionSwitcher}
+        </div>
+
+        {/* Right panel: chat */}
+        <div className="flex-1 flex flex-col min-h-0">
+          {/* Scrollable conversation */}
           <div
-            key={msg.id}
-            className={`flex animate-fade-in-up ${
-              msg.role === "user" ? "justify-end" : "justify-start"
-            }`}
-            style={{ animationDelay: `${i * 0.03}s` }}
+            ref={scrollRef}
+            className="flex-1 overflow-y-auto px-6 py-4 space-y-3"
           >
-            <div
-              className={`rounded-2xl px-4 py-2.5 max-w-[80%] text-sm leading-relaxed ${
-                msg.role === "user"
-                  ? "bg-foreground text-background"
-                  : "bg-secondary text-foreground"
-              }`}
-            >
-              {msg.content}
-            </div>
+            {messages.length === 0 && !isIterating && !error && (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-sm text-muted-foreground">Describe a change to get started</p>
+              </div>
+            )}
+
+            {messages.map((msg, i) => (
+              <div
+                key={msg.id}
+                className={`flex animate-fade-in-up ${
+                  msg.role === "user" ? "justify-end" : "justify-start"
+                }`}
+                style={{ animationDelay: `${i * 0.03}s` }}
+              >
+                <div
+                  className={`rounded-2xl px-4 py-2.5 max-w-[80%] text-sm leading-relaxed ${
+                    msg.role === "user"
+                      ? "bg-foreground text-background"
+                      : "bg-secondary text-foreground"
+                  }`}
+                >
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+
+            {isIterating && (
+              <ThinkingTrace messages={traceMessages} loading={isIterating} />
+            )}
+
+            {error && (
+              <div className="flex items-center gap-2 text-sm text-destructive animate-fade-in-up">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <p>{error}</p>
+              </div>
+            )}
           </div>
-        ))}
 
-        {/* Thinking trace */}
-        {isIterating && (
-          <ThinkingTrace messages={traceMessages} loading={isIterating} />
-        )}
-
-        {/* Error */}
-        {error && (
-          <div className="flex items-center gap-2 text-sm text-destructive animate-fade-in-up">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <p>{error}</p>
+          {/* Sticky bottom input */}
+          <div className="shrink-0 bg-background border-t border-border px-6 py-3">
+            <ChatInput
+              onSend={handleSend}
+              loading={isIterating}
+              placeholder="Describe a change..."
+            />
           </div>
-        )}
-      </div>
-
-      {/* Sticky bottom input */}
-      <div className="sticky bottom-0 bg-background border-t border-border px-6 py-3">
-        <ChatInput
-          onSend={handleSend}
-          loading={isIterating}
-          placeholder="Describe a change..."
-        />
+        </div>
       </div>
     </div>
   );

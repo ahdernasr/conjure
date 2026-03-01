@@ -17,7 +17,7 @@ async def transcribe_audio(audio_bytes: bytes) -> str:
             f"{ELEVENLABS_BASE}/speech-to-text",
             headers={"xi-api-key": settings.ELEVENLABS_API_KEY},
             files={"file": ("recording.webm", audio_bytes, "audio/webm")},
-            data={"model_id": "scribe_v1"},
+            data={"model_id": "scribe_v2"},
         )
         resp.raise_for_status()
         return resp.json()["text"]
@@ -34,7 +34,7 @@ async def text_to_speech(text: str) -> bytes:
             },
             json={
                 "text": text,
-                "model_id": "eleven_multilingual_v2",
+                "model_id": "eleven_turbo_v2_5",
             },
             params={"output_format": "mp3_44100_128"},
         )

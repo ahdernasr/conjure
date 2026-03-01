@@ -1,12 +1,24 @@
+import { useState } from "react";
 import type { App } from "@/types/app";
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight, Trash2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { deleteApp } from "@/api/apps";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface Props {
   apps: App[];
   loading: boolean;
   onSelectApp: (appId: string) => void;
   onBack: () => void;
+  onDeleted: () => void;
+  onAddApp: () => void;
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -21,7 +33,24 @@ function formatRelativeTime(dateStr: string): string {
   return `${days}d ago`;
 }
 
-export default function AppGallery({ apps, loading, onSelectApp, onBack }: Props) {
+export default function AppGallery({ apps, loading, onSelectApp, onBack, onDeleted, onAddApp }: Props) {
+  const [deleteTarget, setDeleteTarget] = useState<App | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteApp(deleteTarget.id);
+      onDeleted();
+    } catch (e) {
+      console.error("Failed to delete app:", e);
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  };
+
   return (
     <div className="flex flex-col min-h-[100dvh]">
       <header className="flex items-center gap-3 px-6 py-3 border-b border-border">
@@ -33,7 +62,15 @@ export default function AppGallery({ apps, loading, onSelectApp, onBack }: Props
         >
           <ArrowLeft className="w-4 h-4" />
         </Button>
-        <h1 className="text-sm font-semibold">Your Apps</h1>
+        <h1 className="text-sm font-semibold flex-1">Your Apps</h1>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onAddApp}
+          className="shrink-0 rounded-full w-8 h-8"
+        >
+          <Plus className="w-4 h-4" />
+        </Button>
       </header>
 
       <div className="flex-1 px-6 py-2">
@@ -51,38 +88,72 @@ export default function AppGallery({ apps, loading, onSelectApp, onBack }: Props
           </div>
         ) : apps.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-sm text-muted-foreground">No apps yet</p>
+            <p className="text-sm text-muted-foreground mb-4">No apps yet</p>
+            <Button variant="outline" size="sm" onClick={onAddApp}>
+              <Plus className="w-3.5 h-3.5 mr-1.5" />
+              Create your first app
+            </Button>
           </div>
         ) : (
           <div>
             {apps.map((app, i) => {
               const color = app.theme_color || "#6366f1";
               return (
-                <button
+                <div
                   key={app.id}
-                  onClick={() => onSelectApp(app.id)}
-                  className="w-full flex items-center gap-3 py-3 border-b border-border last:border-b-0 text-left transition-colors hover:bg-secondary/50 animate-fade-in-up"
+                  className="flex items-center gap-3 py-3 border-b border-border last:border-b-0 animate-fade-in-up"
                   style={{ animationDelay: `${i * 0.03}s` }}
                 >
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold shrink-0"
-                    style={{ backgroundColor: color }}
+                  <button
+                    onClick={() => onSelectApp(app.id)}
+                    className="flex items-center gap-3 flex-1 min-w-0 text-left transition-colors hover:bg-secondary/50 rounded-lg -ml-2 pl-2 -my-1 py-1"
                   >
-                    {app.name.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{app.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {formatRelativeTime(app.created_at)}
-                    </p>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                </button>
+                    <div
+                      className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold shrink-0"
+                      style={{ backgroundColor: color }}
+                    >
+                      {app.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{app.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatRelativeTime(app.created_at)}
+                      </p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                  </button>
+                  <button
+                    onClick={() => setDeleteTarget(app)}
+                    className="shrink-0 p-2 rounded-full text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               );
             })}
           </div>
         )}
       </div>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent className="max-w-[320px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Delete app?</DialogTitle>
+            <DialogDescription>
+              <strong>{deleteTarget?.name}</strong> will be permanently deleted. This can't be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
