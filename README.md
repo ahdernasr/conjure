@@ -6,6 +6,16 @@ Conjure turns natural language into fully functional React PWAs. Generate a wate
 
 Once you have a few apps, the Command Plane ties them together. One voice interface that reads each app's schema, understands what it can do, and executes actions across all of them. "Log a glass of water." "Who's playing next in the tournament?" No app switching.
 
+## Why this exists
+
+You're hosting a ping pong tournament with friends. You need a bracket for 8 players, best of 3, single elimination. You could use Challonge, make an account, configure a bunch of settings, and share a link nobody bookmarks. Or you could say one sentence and have a custom app on your phone in 15 seconds.
+
+Your doctor tells you to drink 3 liters of water a day. Every hydration app in the App Store has premium tiers, social features, and plant animations you didn't ask for. You just want a glass counter with your goal.
+
+You're tracking your roommate's chore rotation. You're scoring a card game at the cottage. You're logging reps at the gym with your specific split. These are all apps that should exist for 5 minutes of effort, not 5 hours of searching for something close enough.
+
+Conjure is for the apps that are too specific for the App Store and too interactive for a ChatGPT response. Things that need persistent state, a UI you come back to, and the ability to change over time.
+
 ## How it works
 
 1. You describe what you want (text or voice)
