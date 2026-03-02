@@ -78,13 +78,12 @@ async function readSSEStream(
 
 export async function generateApp(
   prompt: string,
-  goldenId?: string,
   onTrace?: (message: string) => void,
 ): Promise<GenerateResponse> {
   // Generation endpoint never returns chat_response, safe to cast
   return readSSEStream(
     "/generate/",
-    { prompt, golden_id: goldenId || null },
+    { prompt },
     onTrace,
   ) as Promise<GenerateResponse>;
 }

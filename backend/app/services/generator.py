@@ -185,12 +185,10 @@ const [deleteId, setDeleteId] = useState(null)
 # ─────────────────────────────────────────────────────────────────────────────
 
 AGENTIC_GENERATOR_SYSTEM_PROMPT = f"""You are Conjure's app generator. You build complete, functional React+Tailwind apps by writing files into a Vite project.
+CRITICAL: You MUST call write_file("src/App.jsx", ...) with a complete, functional implementation.
+Never leave placeholder or skeleton code. The user is counting on a working app.
 
-{_PROJECT_STRUCTURE}
-
-{_AVAILABLE_IMPORTS}
-
-{_DATA_PATTERN}
+{_DO_NOT_RULES}
 
 WHAT YOU MUST DO:
 1. Write `src/App.jsx` with your complete app component (REQUIRED)
@@ -210,6 +208,12 @@ WHAT YOU MUST DO:
 
    Every user-facing operation MUST be an action. Include read actions (get_X) and write actions (add_X, remove_X, update_X, toggle_X). Each param must have a type: "string", "number", "boolean". Actions with no params use an empty object {{}}.
 3. You may create additional component files in `src/` (e.g. `src/Timer.jsx`, `src/utils.js`)
+
+{_PROJECT_STRUCTURE}
+
+{_AVAILABLE_IMPORTS}
+
+{_DATA_PATTERN}
 
 {_DESIGN_RULES}
 
@@ -275,26 +279,22 @@ Matching schema.json:
 }}
 ```
 
-INTERACTIVITY:
+{_COMMON_PATTERNS}
+
+INTERACTIVITY & IMPORTANT:
 - App MUST be fully functional, not a mockup
 - All actions via tap (not hover-dependent)
 - Real-time updates where applicable (timers, counters)
 - Haptic feedback: try {{ navigator.vibrate([10]) }} catch(e) {{}} on key actions
 - Use React state (useState, useEffect, useRef) for UI state
 - Use window.__conjure for persistent data
-
-IMPORTANT:
 - Use `write_file` tool to write each file
 - Start by writing src/App.jsx, then schema.json
 - Use only Tailwind CSS classes for styling (no inline styles, no CSS files except index.css)
 - All components must use `export default`
 - Use PLACEHOLDER_APP_ID in schema.json (will be replaced at deploy time)
 
-{_DO_NOT_RULES}
-
-{_COMMON_PATTERNS}
-
-RECOMMENDED WORKFLOW:
+WORKFLOW (follow this exact order):
 1. Write src/App.jsx and any helper component files
 2. Write schema.json
 3. Run validate_jsx on ALL .jsx files you created (not just App.jsx) — e.g. validate_jsx("src/App.jsx"), validate_jsx("src/Timer.jsx")
@@ -397,6 +397,21 @@ def extract_app_name_from_spec(spec: str, fallback: str) -> str:
 
 
 AGENTIC_REFINER_SYSTEM_PROMPT = f"""You are Conjure's app refiner. You modify existing React+Tailwind apps based on user instructions.
+CRITICAL: You MUST call write_file to apply changes. Every part of the user's request must be implemented —
+not just the easy parts. Read the current code first, then rewrite the file with ALL requested changes applied.
+
+{_DO_NOT_RULES}
+
+PRESERVATION RULES:
+1. Preserve ALL existing functionality unless the user specifically asks to change it
+2. Preserve the window.__conjure data contract (getData, setData) and the canonical loading pattern
+3. Preserve the localStorage key pattern
+4. Preserve the data structure unless the modification requires changing it
+5. Keep the same design language (use CSS variable classes: bg-background, text-foreground, bg-card, bg-primary, etc.)
+6. Do NOT add app name headers, logos, or branding. These are mini utility apps — keep just the functionality.
+7. Make ONLY the requested changes — surgical modifications, not rewrites
+8. Do NOT modify protected files: src/main.jsx, src/index.css, vite.config.js, package.json, tailwind.config.js, postcss.config.js, index.html, src/components/ui/*, src/lib/*
+9. Update schema.json if capabilities, data shape, or actions changed. Every action must have {{"params": {{...}}, "description": "..."}} format
 
 {_PROJECT_STRUCTURE}
 
@@ -407,8 +422,6 @@ AGENTIC_REFINER_SYSTEM_PROMPT = f"""You are Conjure's app refiner. You modify ex
 {_DESIGN_RULES}
 
 {_COMPONENT_USAGE}
-
-{_DO_NOT_RULES}
 
 {_COMMON_PATTERNS}
 
@@ -421,18 +434,7 @@ MANDATORY WORKFLOW (follow this exact order every time):
 6. Write ONLY the files that need to change — do not rewrite files that don't need changes
 7. If the data shape changed, update schema.json too
 8. Run `validate_jsx("src/App.jsx")` to check for syntax issues
-9. Run `check_imports("src/App.jsx")` to verify all imports resolve
-
-PRESERVATION RULES:
-1. Preserve ALL existing functionality unless the user specifically asks to change it
-2. Preserve the window.__conjure data contract (getData, setData) and the canonical loading pattern
-3. Preserve the localStorage key pattern
-4. Preserve the data structure unless the modification requires changing it
-5. Keep the same design language (use CSS variable classes: bg-background, text-foreground, bg-card, bg-primary, etc.)
-6. Do NOT add app name headers, logos, or branding. These are mini utility apps — keep just the functionality.
-7. Make ONLY the requested changes — surgical modifications, not rewrites
-8. Do NOT modify protected files: src/main.jsx, src/index.css, vite.config.js, package.json, tailwind.config.js, postcss.config.js, index.html, src/components/ui/*, src/lib/*
-9. Update schema.json if capabilities, data shape, or actions changed. Every action must have {{"params": {{...}}, "description": "..."}} format"""
+9. Run `check_imports("src/App.jsx")` to verify all imports resolve"""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tool definitions for Devstral agentic mode
@@ -1058,10 +1060,47 @@ async def generate_app_pipeline(client, prompt: str, app_id: str, app_name: str,
         build_dir = setup_build_dir(app_id)
         tool_executor = create_tool_executor(build_dir)
 
-        # 2. Agentic generation
+        # 2. Agentic generation with verification
         if on_status:
             await on_status("Crafting your app...")
         messages = await client.generate_app(prompt, build_dir, on_progress=on_status and _tool_progress(on_status))
+
+        # 2b. Verify the output and retry within the same conversation if needed
+        app_jsx = Path(build_dir) / "src" / "App.jsx"
+        for verify_attempt in range(2):
+            code = app_jsx.read_text(encoding="utf-8") if app_jsx.exists() else ""
+
+            # Check for placeholder
+            if not code or "Conjure App" in code:
+                feedback = (
+                    "You did NOT write src/App.jsx. The file still contains the default placeholder. "
+                    "You MUST call write_file to create the actual app. Please write the complete app now."
+                )
+            else:
+                # Ask Mistral Large to verify against the prompt
+                if on_status:
+                    await on_status("Checking the code...")
+                passed, reason = await client.verify_generation(prompt, code)
+                if passed:
+                    logger.info(f"Generation verified for {app_id}: {reason}")
+                    break
+                feedback = (
+                    f"The code you wrote does not match what the user asked for. Review feedback: {reason}\n\n"
+                    f"The user asked for: {prompt[:500]}\n\n"
+                    "Please read your current src/App.jsx, then rewrite it to fully implement the request."
+                )
+
+            logger.warning(f"Generation verify failed for {app_id} (attempt {verify_attempt + 1}): {feedback[:100]}")
+            if on_status:
+                await on_status("Revising the code...")
+            # Continue the same agentic conversation with the feedback
+            messages = await client.fix_build_error(feedback, build_dir, messages, on_progress=on_status and _tool_progress(on_status))
+        else:
+            # Both verification attempts failed
+            code = app_jsx.read_text(encoding="utf-8") if app_jsx.exists() else ""
+            if not code or "Conjure App" in code:
+                logger.error(f"App.jsx still placeholder after retries for {app_id}")
+                return False, generate_semantic_color(app_name)
 
         # 3. Build with retries — keep going until it works
         theme_color = _extract_theme_from_build(build_dir)
@@ -1145,7 +1184,10 @@ async def iterate_app_pipeline(
 
         tool_executor = create_tool_executor(build_dir)
 
-        # 3. Agentic refinement
+        # 3. Agentic refinement with verification
+        app_jsx = Path(build_dir) / "src" / "App.jsx"
+        code_before = app_jsx.read_text(encoding="utf-8") if app_jsx.exists() else ""
+
         if on_status:
             await on_status("Making your changes...")
         messages = await client.refine_app(
@@ -1154,6 +1196,35 @@ async def iterate_app_pipeline(
             raw_instruction=raw_instruction,
             chat_history=chat_history,
         )
+
+        # 3b. Verify the refinement actually changed the code as requested
+        user_instruction = raw_instruction or instruction
+        for verify_attempt in range(2):
+            code_after = app_jsx.read_text(encoding="utf-8") if app_jsx.exists() else ""
+
+            if code_after == code_before:
+                feedback = (
+                    "You did NOT modify src/App.jsx. The file is identical to before your changes. "
+                    "You MUST call write_file to apply the requested changes. Please make the changes now.\n\n"
+                    f"The user asked for: {user_instruction[:500]}"
+                )
+            else:
+                if on_status:
+                    await on_status("Checking the changes...")
+                passed, reason = await client.verify_iteration(user_instruction, code_before, code_after)
+                if passed:
+                    logger.info(f"Iterate verified for {app_id}: {reason}")
+                    break
+                feedback = (
+                    f"The changes are incomplete. Review feedback: {reason}\n\n"
+                    f"The user asked for: {user_instruction[:500]}\n\n"
+                    "Please read your current src/App.jsx and apply ALL the requested changes, not just some of them."
+                )
+
+            logger.warning(f"Iterate verify failed for {app_id} (attempt {verify_attempt + 1}): {feedback[:100]}")
+            if on_status:
+                await on_status("Revising the changes...")
+            messages = await client.fix_build_error(feedback, build_dir, messages, on_progress=on_status and _tool_progress(on_status))
 
         # 4. Build with retries — keep going until it works
         theme_color = _extract_theme_from_build(build_dir)
@@ -1320,151 +1391,8 @@ def generate_semantic_color(name: str, description: str = "") -> str:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Legacy functions (kept for golden template path)
+# PWA asset generators (used by deploy_build)
 # ─────────────────────────────────────────────────────────────────────────────
-
-GENERATOR_SYSTEM_PROMPT = """You are Conjure's app generator. You create complete, self-contained PWA applications from natural language descriptions.
-
-OUTPUT FORMAT: You MUST output ONLY valid HTML. No markdown, no explanation, no code fences. Just the complete HTML document starting with <!DOCTYPE html>.
-
-REQUIREMENTS FOR EVERY APP:
-1. Single self-contained index.html file (CSS and JS inline, inside <style> and <script> tags)
-2. Mobile-first responsive design (viewport meta, touch-friendly tap targets min 44px)
-3. Dark theme: background #0a0a0a, cards #141414, text #e5e5e5, accent color chosen per app
-4. Modern UI: rounded corners (border-radius: 12px), subtle borders (rgba(255,255,255,0.06)), clean typography
-5. All data persisted to localStorage under key "conjure_{{APP_ID}}"
-6. Expose window.__conjure = { getData(), setData(data), getSchema() }
-7. Offline-capable (no external dependencies, no CDN links, no imports, inline everything)
-8. The app must be FULLY FUNCTIONAL with real interactivity, not a mockup
-
-DESIGN RULES:
-- Use CSS Grid or Flexbox for layout
-- Font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif
-- Buttons: min-height 44px, border-radius 8px, clear active states with transform scale(0.97)
-- Cards: background #141414, border 1px solid rgba(255,255,255,0.06), border-radius 12px, padding 16px
-- Animations: subtle transitions (150ms ease), no jarring effects
-- Numbers/stats: large font-size, font-weight bold, font-variant-numeric tabular-nums
-- Full viewport height: min-height 100dvh, no scrollbar unless content overflows
-
-INTERACTIVITY:
-- All actions must work via tap (not hover-dependent)
-- Real-time updates where applicable (timers tick, counters increment live)
-- Use pointer events where needed
-- Haptic feedback via navigator.vibrate([10]) on key actions (wrap in try/catch)
-
-DATA CONTRACT (CRITICAL - follow exactly):
-window.__conjure MUST be defined BEFORE any app logic that uses it.
-- window.__conjure.getData() returns the current state as a plain JS object
-- window.__conjure.setData(obj) replaces state, saves to localStorage, and updates the UI
-- window.__conjure.getSchema() returns { app_id: "{{APP_ID}}", name: "APP_NAME", capabilities: [...], data_shape: {...}, actions: {...} }
-- The localStorage key MUST be "conjure_{{APP_ID}}"
-
-STRUCTURE YOUR HTML EXACTLY LIKE THIS:
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="ACCENT_COLOR">
-  <title>APP_NAME</title>
-  <style>
-    /* ALL CSS HERE */
-  </style>
-</head>
-<body>
-  <!-- ALL HTML HERE -->
-  <script>
-    // 1. Define window.__conjure FIRST
-    // 2. Then all app logic
-  </script>
-</body>
-</html>
-
-IMPORTANT: The {{APP_ID}} placeholder will be replaced with the actual UUID after generation. Use it exactly as {{APP_ID}} in your code."""
-
-
-REFINER_SYSTEM_PROMPT = """You are Conjure's app refiner. You modify existing PWA applications based on user instructions.
-
-You will receive the COMPLETE existing HTML of an app, followed by a modification request.
-
-OUTPUT FORMAT: You MUST output ONLY the complete, modified HTML document. No markdown, no explanation, no code fences. Output the ENTIRE updated HTML starting with <!DOCTYPE html>.
-
-RULES:
-1. Preserve ALL existing functionality unless the user specifically asks to change it
-2. Preserve the window.__conjure contract (getData, setData, getSchema)
-3. Preserve the localStorage key
-4. Preserve the data structure unless the modification requires changing it
-5. Keep the same light theme and design language
-6. Make ONLY the requested changes
-7. The output must be a complete, working HTML file (not a diff or partial update)"""
-
-
-def parse_code_response(raw_response: str) -> str:
-    """Extract HTML from Mistral response, stripping markdown fences if present."""
-    text = raw_response.strip()
-
-    # Try to extract from ```html ... ``` fences
-    match = re.search(r"```html\s*\n(.*?)```", text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
-
-    # Try generic ``` fences
-    match = re.search(r"```\s*\n(.*?)```", text, re.DOTALL)
-    if match:
-        candidate = match.group(1).strip()
-        if candidate.startswith("<!DOCTYPE") or candidate.startswith("<html"):
-            return candidate
-
-    # If it starts with <!DOCTYPE or <html, it's already clean
-    if text.startswith("<!DOCTYPE") or text.startswith("<html"):
-        return text
-
-    # Last resort: find the HTML document within the response
-    match = re.search(r"(<!DOCTYPE html>.*</html>)", text, re.DOTALL | re.IGNORECASE)
-    if match:
-        return match.group(1)
-
-    # Return as-is and hope for the best
-    return text
-
-
-def inject_sync_script(html: str, app_id: str) -> str:
-    """Inject the phone-home sync script before </body>."""
-    sync_script = f"""
-<script>
-(function() {{
-  var APP_ID = '{app_id}';
-  var SYNC_URL = '/api/apps/' + APP_ID + '/sync';
-  function syncToServer() {{
-    try {{
-      var data = window.__conjure.getData();
-      navigator.sendBeacon(SYNC_URL, JSON.stringify(data));
-    }} catch(e) {{}}
-  }}
-  var origSet = window.__conjure.setData.bind(window.__conjure);
-  window.__conjure.setData = function(data) {{
-    origSet(data);
-    syncToServer();
-  }};
-  document.addEventListener('visibilitychange', function() {{
-    if (document.visibilityState === 'hidden') syncToServer();
-  }});
-  window.addEventListener('beforeunload', syncToServer);
-  syncToServer();
-}})();
-</script>"""
-
-    # Insert before </body>
-    if "</body>" in html.lower():
-        idx = html.lower().rfind("</body>")
-        return html[:idx] + sync_script + "\n" + html[idx:]
-    else:
-        return html + sync_script
-
-
-def replace_app_id_placeholder(html: str, app_id: str) -> str:
-    """Replace {{APP_ID}} placeholders with actual UUID."""
-    return html.replace("{{APP_ID}}", app_id)
 
 
 def generate_manifest(app_id: str, app_name: str, theme_color: str) -> dict:
@@ -1488,11 +1416,9 @@ def generate_manifest(app_id: str, app_name: str, theme_color: str) -> dict:
 
 
 def generate_icon_svg(app_name: str, theme_color: str) -> str:
-    """Generate a simple SVG icon: colored circle with first letter."""
-    letter = app_name[0].upper() if app_name else "?"
+    """Generate a simple SVG icon: solid colored rounded square."""
     return f"""<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <rect width="512" height="512" rx="128" fill="{theme_color}"/>
-  <text x="256" y="280" text-anchor="middle" font-family="system-ui,sans-serif" font-size="280" font-weight="bold" fill="white">{letter}</text>
 </svg>"""
 
 
@@ -1518,68 +1444,3 @@ self.addEventListener('fetch', (event) => {
 });"""
 
 
-def extract_schema(html: str, app_id: str, app_name: str) -> dict:
-    """Extract a basic schema from the generated app."""
-    schema_match = re.search(
-        r"getSchema\s*\(\)\s*\{?\s*return\s*(\{.*?\})\s*;?\s*\}",
-        html, re.DOTALL
-    )
-    if schema_match:
-        try:
-            raw = schema_match.group(1)
-            raw = re.sub(r"(\w+)\s*:", r'"\1":', raw)
-            raw = raw.replace("'", '"')
-            return json.loads(raw)
-        except (json.JSONDecodeError, Exception):
-            pass
-
-    return {
-        "app_id": app_id,
-        "name": app_name,
-        "capabilities": ["track_data"],
-        "data_shape": {},
-        "actions": {},
-    }
-
-
-def extract_theme_color(html: str) -> str:
-    """Try to extract the theme/accent color from generated HTML."""
-    match = re.search(r'content="(#[0-9a-fA-F]{6})"', html)
-    if match:
-        return match.group(1)
-    return "#6366f1"
-
-
-def write_app_files(app_id: str, html: str, app_name: str, theme_color: str) -> None:
-    """Write all app files to apps/{uuid}/ (legacy golden template path)."""
-    app_dir = Path(settings.APPS_DIR) / app_id
-    app_dir.mkdir(parents=True, exist_ok=True)
-
-    (app_dir / "index.html").write_text(html, encoding="utf-8")
-
-    manifest = generate_manifest(app_id, app_name, theme_color)
-    (app_dir / "manifest.json").write_text(
-        json.dumps(manifest, indent=2), encoding="utf-8"
-    )
-
-    icon = generate_icon_svg(app_name, theme_color)
-    (app_dir / "icon.svg").write_text(icon, encoding="utf-8")
-
-    (app_dir / "sw.js").write_text(generate_sw(), encoding="utf-8")
-
-    schema = extract_schema(html, app_id, app_name)
-    (app_dir / "schema.json").write_text(
-        json.dumps(schema, indent=2), encoding="utf-8"
-    )
-
-    if not (app_dir / "data.json").exists():
-        (app_dir / "data.json").write_text("{}", encoding="utf-8")
-
-
-def process_generated_html(raw_response: str, app_id: str) -> tuple[str, str]:
-    """Full pipeline: parse → replace placeholders → inject sync → return (html, theme_color)."""
-    html = parse_code_response(raw_response)
-    html = replace_app_id_placeholder(html, app_id)
-    theme_color = extract_theme_color(html)
-    html = inject_sync_script(html, app_id)
-    return html, theme_color

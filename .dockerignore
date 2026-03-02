@@ -1,0 +1,14 @@
+backend/venv
+backend/__pycache__
+backend/**/__pycache__
+backend/conjure.db
+backend/apps
+backend/app/template/node_modules
+backend/app/template/dist
+frontend/node_modules
+frontend/dist
+.git
+.env
+*.md
+Makefile
+dev.sh

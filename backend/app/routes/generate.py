@@ -14,10 +14,10 @@ from ..services.generator import (
     generate_app_pipeline,
     iterate_app_pipeline,
     extract_app_name_from_spec,
+    generate_semantic_color,
     AUGMENTATION_SYSTEM_PROMPT,
     ITERATION_AUGMENTATION_SYSTEM_PROMPT,
 )
-from ..services import golden
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,6 @@ router = APIRouter()
 
 class GenerateRequest(BaseModel):
     prompt: str
-    golden_id: str | None = None  # "hiit", "poker", "packing" for golden templates
 
 
 class IterateRequest(BaseModel):
@@ -50,24 +49,6 @@ def _sse_event(data: dict) -> str:
 async def generate_app(request: GenerateRequest, db=Depends(get_db)):
     """Generate a new app from a text prompt. Returns SSE stream with progress events."""
     app_id = uuid.uuid4().hex[:12]
-
-    # Use golden template if explicitly requested (no streaming needed)
-    if request.golden_id and request.golden_id in golden.GOLDEN_TEMPLATES:
-        app_name, theme_color, _ = golden.deploy_golden(request.golden_id, app_id)
-
-        service = AppService(db)
-        await service.create_app(app_id, app_name, request.prompt, theme_color)
-
-        # Still return SSE for consistency
-        async def golden_stream():
-            yield _sse_event({"type": "status", "message": "Using template..."})
-            yield _sse_event({"type": "complete", "data": {
-                "id": app_id, "name": app_name,
-                "description": request.prompt, "theme_color": theme_color,
-                "version": 1,
-            }})
-
-        return StreamingResponse(golden_stream(), media_type="text/event-stream")
 
     # Streaming agentic pipeline
     queue: asyncio.Queue = asyncio.Queue()
@@ -98,18 +79,12 @@ async def generate_app(request: GenerateRequest, db=Depends(get_db)):
             except Exception as e:
                 logger.error(f"Pipeline exception for {app_id}: {e}")
                 success = False
-                theme_color = "#6366f1"
+                theme_color = generate_semantic_color(app_name)
 
-            # Fallback to golden template
             if not success:
-                logger.warning(f"Pipeline failed for {app_id}, falling back to golden template")
-                await queue.put({"type": "status", "message": "Grabbing a matching template..."})
-                best_golden = golden.pick_best_golden(request.prompt)
-                if best_golden:
-                    app_name, theme_color, _ = golden.deploy_golden(best_golden, app_id)
-                else:
-                    await queue.put({"type": "error", "message": "Couldn't build that one — try describing it differently"})
-                    return
+                logger.warning(f"Pipeline failed for {app_id}")
+                await queue.put({"type": "error", "message": "Couldn't build that one — try describing it differently"})
+                return
 
             # Save to database with own connection (injected db closes with the SSE stream)
             async with aiosqlite.connect(settings.DATABASE_PATH) as pipeline_db:
