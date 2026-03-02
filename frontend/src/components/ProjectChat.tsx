@@ -12,9 +12,10 @@ interface Props {
   app: App;
   onBack: () => void;
   onInstall: (appName: string) => void;
+  initialInstruction?: string;
 }
 
-export default function ProjectChat({ app, onBack, onInstall }: Props) {
+export default function ProjectChat({ app, onBack, onInstall, initialInstruction }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isIterating, setIsIterating] = useState(false);
   const [traceMessages, setTraceMessages] = useState<string[]>([]);
@@ -23,6 +24,15 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
   const [activeVersion, setActiveVersion] = useState(app.version || 1);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const initialInstructionSent = useRef(false);
+
+  // Auto-send initialInstruction on mount
+  useEffect(() => {
+    if (initialInstruction && !initialInstructionSent.current) {
+      initialInstructionSent.current = true;
+      handleSend(initialInstruction);
+    }
+  }, [initialInstruction]);
 
   // Load persisted messages on mount
   useEffect(() => {
@@ -179,7 +189,7 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
         </div>
 
         {/* Mobile phone preview */}
-        <div className="md:hidden px-6 py-5 border-b border-border">
+        <div className="md:hidden px-4 py-4 border-b border-border">
           <PhonePreview appId={app.id} iframeKey={iframeKey} activeVersion={activeVersion} latestVersion={version} />
           {versionSwitcher}
         </div>

@@ -12,10 +12,16 @@ interface Handoff {
   prompt: string;
 }
 
+interface IterateHandoff {
+  app_id: string;
+  instruction: string;
+}
+
 export function useCommand() {
   const [messages, setMessages] = useState<CommandMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [handoff, setHandoff] = useState<Handoff | null>(null);
+  const [iterateHandoff, setIterateHandoff] = useState<IterateHandoff | null>(null);
   const conversationIdRef = useRef<string | undefined>(undefined);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -58,7 +64,9 @@ export function useCommand() {
 
       speakResponse(data.response);
 
-      if (data.handoff_create && data.create_prompt) {
+      if (data.handoff_iterate && data.iterate_app_id && data.iterate_instruction) {
+        setIterateHandoff({ app_id: data.iterate_app_id, instruction: data.iterate_instruction });
+      } else if (data.handoff_create && data.create_prompt) {
         setHandoff({ prompt: data.create_prompt });
       }
     } catch (err) {
@@ -75,6 +83,12 @@ export function useCommand() {
   }, [speakResponse]);
 
   const clearHandoff = useCallback(() => setHandoff(null), []);
+  const clearIterateHandoff = useCallback(() => setIterateHandoff(null), []);
 
-  return { messages, loading, send, handoff, clearHandoff };
+  const clearConversation = useCallback(() => {
+    setMessages([]);
+    conversationIdRef.current = undefined;
+  }, []);
+
+  return { messages, loading, send, handoff, clearHandoff, iterateHandoff, clearIterateHandoff, clearConversation };
 }

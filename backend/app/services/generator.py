@@ -143,7 +143,8 @@ _DO_NOT_RULES = """DO NOT (common mistakes that break builds):
 - Do NOT invent lucide-react icon names — only use these known icons: Plus, Minus, X, Check, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, ArrowLeft, ArrowRight, Trash2, Edit, Search, Settings, Star, Heart, Home, User, Bell, Calendar, Clock, Filter, MoreHorizontal, MoreVertical, Loader2, RotateCcw, Share, Download, Upload, Eye, EyeOff, Copy, Sparkles
 - Do NOT call hooks (useState, useEffect, useRef, useMemo, useCallback) inside conditionals, loops, or callbacks — hooks must be at the top level of the component function
 - Do NOT render list `.map()` items without a unique `key` prop — always add key={item.id} or key={index} as last resort
-- Do NOT use inline `style={{}}` for layout — use Tailwind classes. Inline styles are ONLY acceptable inside `<style>` tags for CSS variable overrides (e.g. `:root { --primary: ... }`)"""
+- Do NOT use inline `style={{}}` for layout — use Tailwind classes. Inline styles are ONLY acceptable inside `<style>` tags for CSS variable overrides (e.g. `:root { --primary: ... }`)
+- Do NOT add voice input, speech recognition, microphone buttons, text-to-speech, or any voice/speech features — the parent platform handles all voice interactions"""
 
 _COMMON_PATTERNS = """COMMON PATTERNS (use these instead of reinventing):
 

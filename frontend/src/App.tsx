@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, ArrowRight, ArrowUp, AlertCircle, Loader2, Timer, ListChecks, Trophy } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUp, AlertCircle, Loader2, Timer, ListChecks, Trophy, Sparkles, Plus, Mic, Keyboard } from "lucide-react";
 import AppGallery from "@/components/AppGallery";
 import ChatInput from "@/components/ChatInput";
 import InstallPrompt from "@/components/InstallPrompt";
@@ -14,10 +14,16 @@ import type { App } from "@/types/app";
 
 type View = "home" | "apps" | "create" | "chat";
 
-const SUGGESTIONS = [
-  { icon: Timer, text: "HIIT timer, 40s work, 20s rest" },
-  { icon: ListChecks, text: "Packing list with checkboxes" },
+const SUGGESTIONS_NO_APPS = [
+  { icon: Timer, text: "A HIIT timer, 40s work 20s rest" },
+  { icon: ListChecks, text: "A packing list with checkboxes" },
   { icon: Trophy, text: "Poker night scoreboard for 4" },
+];
+
+const SUGGESTIONS_WITH_APPS = [
+  { icon: Sparkles, text: "Summarize my day" },
+  { icon: ListChecks, text: "What's on my todo list?" },
+  { icon: Plus, text: "Build me a new app" },
 ];
 
 export default function App() {
@@ -32,21 +38,30 @@ export default function App() {
     dismiss,
   } = useGenerate(refreshApps);
 
-  const { messages: cmdMessages, loading: cmdLoading, send: cmdSend, handoff, clearHandoff } = useCommand();
+  const {
+    messages: cmdMessages,
+    loading: cmdLoading,
+    send: cmdSend,
+    handoff,
+    clearHandoff,
+    iterateHandoff,
+    clearIterateHandoff,
+    clearConversation,
+  } = useCommand();
+
+  // Voice — transcription feeds directly into Command Plane
+  const handleVoiceTranscription = useCallback((text: string) => {
+    cmdSend(text);
+  }, [cmdSend]);
+  const { voiceState, error: voiceError, toggleRecording } = useVoice(handleVoiceTranscription);
 
   const [view, setView] = useState<View>("home");
+  const [inputMode, setInputMode] = useState<"speech" | "text">("speech");
   const [selectedAppId, setSelectedAppId] = useState<string | null>(null);
   const [showInstall, setShowInstall] = useState(false);
   const [installAppName, setInstallAppName] = useState("App");
-  const [heroInput, setHeroInput] = useState("");
+  const [pendingInstruction, setPendingInstruction] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Voice for home hero mic — feed transcription into the input field
-  const handleVoiceTranscription = useCallback((text: string) => {
-    setHeroInput((prev) => (prev ? `${prev} ${text}` : text));
-  }, [cmdSend]);
-
-  const { voiceState, error: voiceError, toggleRecording } = useVoice(handleVoiceTranscription);
 
   // Auto-scroll command messages
   useEffect(() => {
@@ -65,6 +80,16 @@ export default function App() {
     }
   }, [handoff, generate, clearHandoff]);
 
+  // Handle iterate handoff → navigate to app chat with instruction
+  useEffect(() => {
+    if (iterateHandoff) {
+      setSelectedAppId(iterateHandoff.app_id);
+      setPendingInstruction(iterateHandoff.instruction);
+      setView("chat");
+      clearIterateHandoff();
+    }
+  }, [iterateHandoff, clearIterateHandoff]);
+
   // When generation completes → chat
   useEffect(() => {
     if (status === "done" && generatedAppId) {
@@ -80,7 +105,9 @@ export default function App() {
 
   const handleBack = () => {
     setSelectedAppId(null);
+    setPendingInstruction(null);
     dismiss();
+    clearConversation();
     setView("home");
   };
 
@@ -89,15 +116,16 @@ export default function App() {
     setShowInstall(true);
   };
 
-  const handleSuggest = (prompt: string) => {
-    generate(prompt);
-    setView("create");
+  const handleSuggestion = (text: string) => {
+    cmdSend(text);
   };
 
   const isGenerating = status === "generating";
   const isRecording = voiceState === "recording";
   const isTranscribing = voiceState === "transcribing";
   const hasConversation = cmdMessages.length > 0;
+  const hasApps = apps.length > 0;
+  const suggestions = hasApps ? SUGGESTIONS_WITH_APPS : SUGGESTIONS_NO_APPS;
 
   const selectedApp: App | null = selectedAppId
     ? apps.find((a) => a.id === selectedAppId) ?? {
@@ -119,6 +147,7 @@ export default function App() {
           app={selectedApp}
           onBack={handleBack}
           onInstall={handleInstall}
+          initialInstruction={pendingInstruction ?? undefined}
         />
 
       ) : view === "apps" ? (
@@ -169,158 +198,71 @@ export default function App() {
             )}
           </main>
 
-          <div className="sticky bottom-0 bg-background border-t border-border px-6 py-3">
-            <ChatInput onSend={(msg) => generate(msg)} loading={isGenerating} />
-          </div>
+          {!isGenerating && (
+            <div className="sticky bottom-0 bg-background border-t border-border px-6 py-3">
+              <ChatInput onSend={(msg) => generate(msg)} loading={isGenerating} />
+            </div>
+          )}
         </div>
 
       ) : (
-        /* ── Home View (Voice-First) ── */
+        /* ── Home View (Command Plane) ── */
         <div className="flex flex-col min-h-[100dvh] max-w-3xl mx-auto w-full">
           {/* Header */}
           <header className="flex items-center justify-between px-6 py-4">
             <h1 className="text-xl font-bold tracking-tight" style={{ fontFamily: "'Space Grotesk', sans-serif", letterSpacing: '-0.02em' }}>Conjure</h1>
-            {apps.length > 0 && (
-              <button
-                onClick={() => setView("apps")}
-                className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Your Apps
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {/* Speech / Text toggle */}
+              <div className="flex items-center rounded-lg border border-border overflow-hidden">
+                <button
+                  onClick={() => setInputMode("speech")}
+                  className={`flex items-center justify-center w-8 h-8 transition-colors duration-150 ${
+                    inputMode === "speech"
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  aria-label="Speech mode"
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={() => setInputMode("text")}
+                  className={`flex items-center justify-center w-8 h-8 transition-colors duration-150 ${
+                    inputMode === "text"
+                      ? "bg-foreground text-background"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  aria-label="Text mode"
+                >
+                  <Keyboard className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              {hasApps && (
+                <button
+                  onClick={() => setView("apps")}
+                  className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Your Apps
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </header>
 
-          {/* Center content */}
+          {/* Main scrollable area */}
           <div ref={scrollRef} className="flex-1 overflow-y-auto flex flex-col">
             {!hasConversation ? (
-              /* Hero mode */
-              <div className="flex-1 flex flex-col items-center justify-center px-6 pb-4">
-                <p className="text-2xl font-semibold text-foreground mb-2 tracking-tight">
-                  What do you want to build?
-                </p>
-                <p className="text-sm text-muted-foreground mb-12">
-                  Describe an app and we'll create it instantly
-                </p>
-
-                {/* Aurora Orb — the blob IS the button */}
-                <button
-                  onClick={toggleRecording}
-                  disabled={isTranscribing || cmdLoading}
-                  className="relative flex items-center justify-center mb-2 cursor-pointer transition-transform duration-300 hover:scale-105 active:scale-95 disabled:opacity-60 outline-none"
-                  style={{ width: 200, height: 200 }}
-                >
-                  {/* Glow wrapper — breathes on idle, pulses on record */}
-                  <div
-                    className="absolute inset-0"
-                    style={{
-                      animation: isRecording
-                        ? 'aurora-pulse 1.2s ease-in-out infinite'
-                        : 'aurora-breathe 3s ease-in-out infinite',
-                    }}
-                  >
-                    {/* Layer 1 — indigo/sky conic gradient */}
-                    <div
-                      className={`absolute rounded-full transition-opacity duration-700 ${
-                        isRecording ? 'opacity-70' : 'opacity-30'
-                      }`}
-                      style={{
-                        inset: '-15px',
-                        background: 'conic-gradient(from 0deg, #818cf8, #38bdf8, #818cf8)',
-                        filter: 'blur(40px)',
-                        animation: `aurora-spin ${isRecording ? '3s' : '8s'} linear infinite`,
-                      }}
-                    />
-                    {/* Layer 2 — purple/teal counter-rotate */}
-                    <div
-                      className={`absolute rounded-full transition-opacity duration-700 ${
-                        isRecording ? 'opacity-60' : 'opacity-20'
-                      }`}
-                      style={{
-                        inset: '-5px',
-                        background: 'conic-gradient(from 180deg, #c084fc, #2dd4bf, #c084fc)',
-                        filter: 'blur(35px)',
-                        animation: `aurora-spin ${isRecording ? '2.5s' : '6s'} linear infinite reverse`,
-                      }}
-                    />
-                    {/* Layer 3 — warm accent, fades in when recording */}
-                    <div
-                      className={`absolute rounded-full transition-opacity duration-700 ${
-                        isRecording ? 'opacity-50' : 'opacity-0'
-                      }`}
-                      style={{
-                        inset: '5px',
-                        background: 'conic-gradient(from 90deg, #fb7185, #f472b6, #fb7185)',
-                        filter: 'blur(28px)',
-                        animation: 'aurora-spin 2s linear infinite',
-                      }}
-                    />
-                  </div>
-
-                  {/* Transcribing indicator */}
-                  {isTranscribing && (
-                    <div className="relative z-10">
-                      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                    </div>
-                  )}
-                </button>
-
-                {/* Mic status label */}
-                <p className={`text-xs mt-4 mb-8 transition-colors duration-300 ${
-                  isRecording ? 'text-foreground font-medium' : 'text-muted-foreground'
-                }`}>
-                  {isRecording ? 'Listening...' : isTranscribing ? 'Transcribing...' : 'Tap to speak'}
-                </p>
-
-                {voiceError && (
-                  <p className="text-xs text-destructive mb-3 px-1">{voiceError}</p>
-                )}
-
-                {/* Text input bar */}
-                <div className="w-full max-w-lg mb-8">
-                  <div className="flex items-center gap-2 h-12 px-4 rounded-xl border border-border bg-background focus-within:border-foreground/20 transition-all duration-200">
-                    <input
-                      type="text"
-                      value={heroInput}
-                      onChange={(e) => setHeroInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && heroInput.trim() && !cmdLoading) {
-                          handleSuggest(heroInput.trim());
-                          setHeroInput("");
-                        }
-                      }}
-                      placeholder="or type your idea..."
-                      disabled={cmdLoading}
-                      className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none disabled:opacity-50"
-                    />
-                    <button
-                      onClick={() => {
-                        if (heroInput.trim()) {
-                          handleSuggest(heroInput.trim());
-                          setHeroInput("");
-                        }
-                      }}
-                      disabled={cmdLoading || !heroInput.trim()}
-                      className={`shrink-0 w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-150 ${
-                        heroInput.trim() && !cmdLoading
-                          ? "bg-foreground text-background"
-                          : "bg-secondary text-muted-foreground"
-                      } disabled:opacity-40`}
-                    >
-                      <ArrowUp className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-
+              /* Idle state — suggestions above, orb below */
+              <div className="flex-1 flex flex-col items-center justify-end px-6 pb-[10%]">
                 {/* Suggestion chips */}
-                <div className="flex flex-col gap-2 w-full max-w-lg">
+                <div className="flex flex-col gap-2 w-full max-w-lg mb-[10%]">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                     Try saying
                   </p>
-                  {SUGGESTIONS.map((s, i) => (
+                  {suggestions.map((s, i) => (
                     <button
                       key={i}
-                      onClick={() => handleSuggest(s.text)}
+                      onClick={() => handleSuggestion(s.text)}
                       className="flex items-center gap-3 text-left px-4 py-3 rounded-xl
                         border border-border text-sm text-foreground
                         hover:bg-secondary transition-colors duration-150
@@ -333,53 +275,187 @@ export default function App() {
                     </button>
                   ))}
                 </div>
+
+                {/* Aurora orb — speech mode only */}
+                {inputMode === "speech" && (
+                  <div className="flex flex-col items-center">
+                    <button
+                      onClick={toggleRecording}
+                      disabled={isTranscribing || cmdLoading}
+                      className="relative flex items-center justify-center cursor-pointer transition-transform duration-300 hover:scale-105 active:scale-95 disabled:opacity-60 outline-none"
+                      style={{ width: 80, height: 80 }}
+                    >
+                      <div
+                        className="absolute inset-0"
+                        style={{
+                          animation: isRecording
+                            ? 'aurora-pulse 1.2s ease-in-out infinite'
+                            : 'aurora-breathe 3s ease-in-out infinite',
+                        }}
+                      >
+                        <div
+                          className={`absolute rounded-full transition-opacity duration-700 ${
+                            isRecording ? 'opacity-70' : 'opacity-30'
+                          }`}
+                          style={{
+                            inset: '-8px',
+                            background: 'conic-gradient(from 0deg, #818cf8, #38bdf8, #818cf8)',
+                            filter: 'blur(20px)',
+                            animation: `aurora-spin ${isRecording ? '3s' : '8s'} linear infinite`,
+                          }}
+                        />
+                        <div
+                          className={`absolute rounded-full transition-opacity duration-700 ${
+                            isRecording ? 'opacity-60' : 'opacity-20'
+                          }`}
+                          style={{
+                            inset: '-2px',
+                            background: 'conic-gradient(from 180deg, #c084fc, #2dd4bf, #c084fc)',
+                            filter: 'blur(16px)',
+                            animation: `aurora-spin ${isRecording ? '2.5s' : '6s'} linear infinite reverse`,
+                          }}
+                        />
+                        <div
+                          className={`absolute rounded-full transition-opacity duration-700 ${
+                            isRecording ? 'opacity-50' : 'opacity-0'
+                          }`}
+                          style={{
+                            inset: '4px',
+                            background: 'conic-gradient(from 90deg, #fb7185, #f472b6, #fb7185)',
+                            filter: 'blur(12px)',
+                            animation: 'aurora-spin 2s linear infinite',
+                          }}
+                        />
+                      </div>
+
+                      {isTranscribing && (
+                        <div className="relative z-10">
+                          <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                        </div>
+                      )}
+                    </button>
+
+                    <p className={`text-xs mt-2 transition-colors duration-300 ${
+                      isRecording ? 'text-foreground font-medium' : 'text-muted-foreground'
+                    }`}>
+                      {isRecording ? 'Listening...' : isTranscribing ? 'Transcribing...' : 'Tap to speak'}
+                    </p>
+
+                    {voiceError && (
+                      <p className="text-[11px] text-destructive mt-1">{voiceError}</p>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               /* Conversation mode */
-              <>
-                <div className="flex-1 px-6 py-4 space-y-3">
-                  {cmdMessages.map((msg: CommandMessage, i: number) => (
+              <div className="flex-1 px-6 py-4 space-y-3">
+                {cmdMessages.map((msg: CommandMessage, i: number) => (
+                  <div
+                    key={msg.id}
+                    className={`flex animate-fade-in-up ${
+                      msg.role === "user" ? "justify-end" : "justify-start"
+                    }`}
+                    style={{ animationDelay: `${i * 0.03}s` }}
+                  >
                     <div
-                      key={msg.id}
-                      className={`flex animate-fade-in-up ${
-                        msg.role === "user" ? "justify-end" : "justify-start"
+                      className={`rounded-2xl px-4 py-2.5 max-w-[80%] text-sm leading-relaxed ${
+                        msg.role === "user"
+                          ? "bg-foreground text-background"
+                          : "bg-secondary text-foreground"
                       }`}
-                      style={{ animationDelay: `${i * 0.03}s` }}
                     >
-                      <div
-                        className={`rounded-2xl px-4 py-2.5 max-w-[80%] text-sm leading-relaxed ${
-                          msg.role === "user"
-                            ? "bg-foreground text-background"
-                            : "bg-secondary text-foreground"
-                        }`}
-                      >
-                        {msg.content}
-                      </div>
+                      {msg.content}
                     </div>
-                  ))}
-                  {cmdLoading && (
-                    <div className="flex justify-start animate-fade-in-up">
-                      <div className="bg-secondary rounded-2xl px-4 py-2.5">
-                        <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                      </div>
+                  </div>
+                ))}
+                {cmdLoading && (
+                  <div className="flex justify-start animate-fade-in-up">
+                    <div className="bg-secondary rounded-2xl px-4 py-2.5">
+                      <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                     </div>
-                  )}
-                </div>
-              </>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
-          {/* Bottom input — only in conversation mode */}
-          {hasConversation && (
+          {/* Bottom input — respects input mode */}
+          {inputMode === "text" ? (
             <div className="shrink-0 bg-background border-t border-border px-6 py-3">
               <ChatInput
                 onSend={cmdSend}
                 loading={cmdLoading}
-                placeholder="Ask about your apps..."
-                showMic={false}
+                placeholder="Ask anything..."
+                showMic={true}
               />
             </div>
-          )}
+          ) : hasConversation ? (
+            <div className="shrink-0 bg-background px-6 pb-[10%] pt-3 flex flex-col items-center">
+              <button
+                onClick={toggleRecording}
+                disabled={isTranscribing || cmdLoading}
+                className="relative flex items-center justify-center cursor-pointer transition-transform duration-300 hover:scale-105 active:scale-95 disabled:opacity-60 outline-none"
+                style={{ width: 77, height: 77 }}
+              >
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    animation: isRecording
+                      ? 'aurora-pulse 1.2s ease-in-out infinite'
+                      : 'aurora-breathe 3s ease-in-out infinite',
+                  }}
+                >
+                  <div
+                    className={`absolute rounded-full transition-opacity duration-700 ${
+                      isRecording ? 'opacity-70' : 'opacity-30'
+                    }`}
+                    style={{
+                      inset: '-6px',
+                      background: 'conic-gradient(from 0deg, #818cf8, #38bdf8, #818cf8)',
+                      filter: 'blur(16px)',
+                      animation: `aurora-spin ${isRecording ? '3s' : '8s'} linear infinite`,
+                    }}
+                  />
+                  <div
+                    className={`absolute rounded-full transition-opacity duration-700 ${
+                      isRecording ? 'opacity-60' : 'opacity-20'
+                    }`}
+                    style={{
+                      inset: '-2px',
+                      background: 'conic-gradient(from 180deg, #c084fc, #2dd4bf, #c084fc)',
+                      filter: 'blur(12px)',
+                      animation: `aurora-spin ${isRecording ? '2.5s' : '6s'} linear infinite reverse`,
+                    }}
+                  />
+                  <div
+                    className={`absolute rounded-full transition-opacity duration-700 ${
+                      isRecording ? 'opacity-50' : 'opacity-0'
+                    }`}
+                    style={{
+                      inset: '4px',
+                      background: 'conic-gradient(from 90deg, #fb7185, #f472b6, #fb7185)',
+                      filter: 'blur(10px)',
+                      animation: 'aurora-spin 2s linear infinite',
+                    }}
+                  />
+                </div>
+                {isTranscribing && (
+                  <div className="relative z-10">
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+              </button>
+              <p className={`text-xs mt-1 mb-1 transition-colors duration-300 ${
+                isRecording ? 'text-foreground font-medium' : 'text-muted-foreground'
+              }`}>
+                {isRecording ? 'Listening...' : isTranscribing ? 'Transcribing...' : 'Tap to speak'}
+              </p>
+              {voiceError && (
+                <p className="text-[11px] text-destructive">{voiceError}</p>
+              )}
+            </div>
+          ) : null}
         </div>
       )}
 
