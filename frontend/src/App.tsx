@@ -142,6 +142,7 @@ export default function App() {
           onBack={handleBack}
           onInstall={handleInstall}
           initialInstruction={pendingInstruction ?? undefined}
+          inputMode={inputMode}
         />
 
       ) : view === "apps" ? (

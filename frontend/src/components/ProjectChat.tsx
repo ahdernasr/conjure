@@ -6,6 +6,7 @@ import { getMessages, addMessage, type ChatMessage } from "@/api/apps";
 import PhonePreview from "@/components/PhonePreview";
 import ChatInput from "@/components/ChatInput";
 import ThinkingTrace from "@/components/ThinkingTrace";
+import { useVoice } from "@/hooks/useVoice";
 import { Button } from "@/components/ui/button";
 
 interface Props {
@@ -13,9 +14,10 @@ interface Props {
   onBack: () => void;
   onInstall: (appName: string) => void;
   initialInstruction?: string;
+  inputMode?: "speech" | "text";
 }
 
-export default function ProjectChat({ app, onBack, onInstall, initialInstruction }: Props) {
+export default function ProjectChat({ app, onBack, onInstall, initialInstruction, inputMode = "text" }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isIterating, setIsIterating] = useState(false);
   const [traceMessages, setTraceMessages] = useState<string[]>([]);
@@ -25,6 +27,14 @@ export default function ProjectChat({ app, onBack, onInstall, initialInstruction
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const initialInstructionSent = useRef(false);
+
+  // Voice — transcription feeds into handleSend
+  const handleVoiceTranscription = useCallback((text: string) => {
+    handleSend(text);
+  }, []);
+  const { voiceState, error: voiceError, toggleRecording } = useVoice(handleVoiceTranscription);
+  const isRecording = voiceState === "recording";
+  const isTranscribing = voiceState === "transcribing";
 
   // Auto-send initialInstruction on mount
   useEffect(() => {
@@ -239,14 +249,81 @@ export default function ProjectChat({ app, onBack, onInstall, initialInstruction
             )}
           </div>
 
-          {/* Sticky bottom input */}
-          <div className="shrink-0 bg-background border-t border-border px-6 py-3">
-            <ChatInput
-              onSend={handleSend}
-              loading={isIterating}
-              placeholder="Describe a change..."
-            />
-          </div>
+          {/* Sticky bottom input — respects input mode */}
+          {inputMode === "text" ? (
+            <div className="shrink-0 bg-background border-t border-border px-6 py-3">
+              <ChatInput
+                onSend={handleSend}
+                loading={isIterating}
+                placeholder="Describe a change..."
+              />
+            </div>
+          ) : (
+            <div className="shrink-0 bg-background px-6 pb-[7%] pt-4 flex flex-col items-center">
+              <button
+                onClick={toggleRecording}
+                disabled={isTranscribing || isIterating}
+                className="relative flex items-center justify-center cursor-pointer transition-transform duration-300 hover:scale-105 active:scale-95 disabled:opacity-60 outline-none"
+                style={{ width: 96, height: 96 }}
+              >
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    animation: isRecording
+                      ? 'aurora-pulse 1.2s ease-in-out infinite'
+                      : 'aurora-breathe 3s ease-in-out infinite',
+                  }}
+                >
+                  <div
+                    className={`absolute rounded-full transition-opacity duration-700 ${
+                      isRecording ? 'opacity-70' : 'opacity-30'
+                    }`}
+                    style={{
+                      inset: '-10px',
+                      background: 'conic-gradient(from 0deg, #818cf8, #38bdf8, #818cf8)',
+                      filter: 'blur(24px)',
+                      animation: `aurora-spin ${isRecording ? '3s' : '8s'} linear infinite`,
+                    }}
+                  />
+                  <div
+                    className={`absolute rounded-full transition-opacity duration-700 ${
+                      isRecording ? 'opacity-60' : 'opacity-20'
+                    }`}
+                    style={{
+                      inset: '-2px',
+                      background: 'conic-gradient(from 180deg, #c084fc, #2dd4bf, #c084fc)',
+                      filter: 'blur(19px)',
+                      animation: `aurora-spin ${isRecording ? '2.5s' : '6s'} linear infinite reverse`,
+                    }}
+                  />
+                  <div
+                    className={`absolute rounded-full transition-opacity duration-700 ${
+                      isRecording ? 'opacity-50' : 'opacity-0'
+                    }`}
+                    style={{
+                      inset: '5px',
+                      background: 'conic-gradient(from 90deg, #fb7185, #f472b6, #fb7185)',
+                      filter: 'blur(14px)',
+                      animation: 'aurora-spin 2s linear infinite',
+                    }}
+                  />
+                </div>
+                {isTranscribing && (
+                  <div className="relative z-10">
+                    <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                  </div>
+                )}
+              </button>
+              <p className={`text-xs mt-2 transition-colors duration-300 ${
+                isRecording ? 'text-foreground font-medium' : 'text-muted-foreground'
+              }`}>
+                {isRecording ? 'Listening...' : isTranscribing ? 'Transcribing...' : 'Tap to speak'}
+              </p>
+              {voiceError && (
+                <p className="text-[11px] text-destructive mt-1">{voiceError}</p>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
