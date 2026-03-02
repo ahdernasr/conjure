@@ -4,6 +4,7 @@ export interface GenerateResponse {
   description: string;
   theme_color: string;
   version?: number;
+  summary?: string;
 }
 
 export interface ChatOnlyResponse {

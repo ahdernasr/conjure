@@ -178,10 +178,19 @@ async def iterate_app(request: IterateRequest, db=Depends(get_db)):
             )
             logger.info(f"Augmented iteration for {request.app_id}")
 
+            # Load recent chat history so the refiner understands follow-ups
+            async with aiosqlite.connect(settings.DATABASE_PATH) as hist_db:
+                hist_db.row_factory = aiosqlite.Row
+                hist_service = AppService(hist_db)
+                all_msgs = await hist_service.get_messages(request.app_id)
+            # Keep last 6 messages (3 turns) for context without bloating prompt
+            chat_history = [{"role": m["role"], "content": m["content"]} for m in all_msgs[-6:]]
+
             try:
                 success, theme_color, new_version = await iterate_app_pipeline(
                     client, augmented_instruction, request.app_id, app["name"],
-                    on_status=on_status, current_version=current_version
+                    on_status=on_status, current_version=current_version,
+                    raw_instruction=request.instruction, chat_history=chat_history,
                 )
             except Exception as e:
                 logger.error(f"Iterate pipeline exception for {request.app_id}: {e}")
@@ -204,10 +213,13 @@ async def iterate_app(request: IterateRequest, db=Depends(get_db)):
                 )
                 await pipeline_db.commit()
 
+            summary = await client.summarize_changes(request.instruction)
+
             await queue.put({"type": "complete", "data": {
                 "id": request.app_id, "name": app["name"],
                 "description": request.instruction, "theme_color": theme_color,
                 "version": new_version,
+                "summary": summary,
             }})
         except Exception as e:
             logger.error(f"Iterate stream error: {e}")

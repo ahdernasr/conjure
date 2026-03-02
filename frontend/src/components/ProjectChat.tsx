@@ -71,7 +71,7 @@ export default function ProjectChat({ app, onBack, onInstall }: Props) {
         setActiveVersion(newVersion);
         setIframeKey((prev) => prev + 1);
 
-        const assistantContent = `Done — version ${newVersion}`;
+        const assistantContent = result.summary || `Done — version ${newVersion}`;
         const assistantMsg: ChatMessage = { id: Date.now() + 1, role: "assistant", content: assistantContent, version: newVersion };
         setMessages((prev) => [...prev, assistantMsg]);
 

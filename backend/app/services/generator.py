@@ -56,18 +56,26 @@ main.jsx defines `window.__conjure` with:
 
 Use these in your components to persist and read data.
 
+WARNING: setData() REPLACES ALL stored data. Always include ALL data keys in every setData() call. If your app has `items` and `filter`, calling setData({ items }) will erase `filter`.
+
 CANONICAL DATA LOADING PATTERN (use this in every app):
 ```jsx
-const [items, setItems] = useState(() => {
+// Use ONE combined state object so setData always writes ALL keys
+const [state, setState] = useState(() => {
   const data = window.__conjure.getData()
-  return data.items ?? []
+  return { items: data.items ?? [], filter: data.filter ?? "all" }
 })
 
+// ONE useEffect syncs the entire state — no data loss
 useEffect(() => {
-  window.__conjure.setData({ items })
-}, [items])
+  window.__conjure.setData(state)
+}, [state])
+
+// Update individual fields by spreading previous state
+const addItem = (item) => setState(prev => ({ ...prev, items: [...prev.items, item] }))
+const setFilter = (f) => setState(prev => ({ ...prev, filter: f }))
 ```
-Initialize state lazily from getData() in useState's initializer function, then sync back with useEffect whenever state changes. This ensures data persists across reloads."""
+Use ONE useState with a combined object + ONE useEffect to sync. Update fields via setState(prev => ({ ...prev, key: newValue })). This prevents multiple useEffects from overwriting each other."""
 
 _DESIGN_RULES = """DESIGN RULES:
 - Use CSS variable classes: bg-background, text-foreground, bg-card, text-card-foreground, bg-primary, text-primary-foreground, bg-secondary, text-secondary-foreground, text-muted-foreground, bg-muted, border-border, bg-destructive
@@ -90,7 +98,12 @@ _DESIGN_RULES = """DESIGN RULES:
 - Use shadcn components: Button for actions, Card for containers, Badge for status, Input for text fields, Progress for bars, Tabs for sections, Switch for toggles, Dialog for modals
 - Numbers/stats: text-2xl font-bold tabular-nums
 - Transitions: transition-transform duration-150, active:scale-[0.97] on buttons
-- Full viewport height: min-h-dvh on root container, use flex column layout to distribute space evenly — do NOT rely on large fixed margins or padding"""
+- Full viewport height: min-h-dvh on root container, use flex column layout to distribute space evenly — do NOT rely on large fixed margins or padding
+- Primary-foreground contrast: When overriding --primary, also override --primary-foreground for contrast. Bright accents (yellow, lime, cyan) → use black text (`--primary-foreground: 0 0% 0%`). Dark accents (navy, purple, dark green) → use white text (`--primary-foreground: 0 0% 100%`).
+- The default theme is LIGHT. No dark mode class variant exists. Do not add `dark:` Tailwind variants.
+- Scroll handling: The iframe is 844px tall. Design so the root container fits in 844px. Scrollable regions (long lists, feeds) go inside a flex-1 area with `overflow-y-auto`, not on the whole page.
+- Text overflow: Truncate long text with `truncate` (single line) or `line-clamp-2` / `line-clamp-3` (multi-line). Never allow horizontal scroll.
+- Empty states: Always show a friendly empty state message when lists are empty (e.g. "No items yet — tap + to add one")."""
 
 _COMPONENT_USAGE = """COMPONENT USAGE EXAMPLES:
 ```jsx
@@ -124,7 +137,47 @@ _DO_NOT_RULES = """DO NOT (common mistakes that break builds):
 - Do NOT use position: fixed — it breaks inside the iframe preview. Use flex layout with mt-auto for bottom elements.
 - Do NOT use window.location or window.history for navigation — these are single-screen utility apps
 - Do NOT import React itself (e.g. `import React from "react"`) — only import hooks and functions you actually use: `import { useState, useEffect } from "react"`
-- Do NOT use className on React fragments (<> or <React.Fragment>) — fragments don't accept props"""
+- Do NOT use className on React fragments (<> or <React.Fragment>) — fragments don't accept props
+- Do NOT import from `@radix-ui/*` directly — use the shadcn wrappers in `./components/ui/` (e.g. use `./components/ui/dialog` not `@radix-ui/react-dialog`)
+- Do NOT use `onChange` on Switch (use `onCheckedChange`) or on Tabs (use `onValueChange`) — these are Radix-based components with different event APIs
+- Do NOT invent lucide-react icon names — only use these known icons: Plus, Minus, X, Check, ChevronRight, ChevronLeft, ChevronDown, ChevronUp, ArrowLeft, ArrowRight, Trash2, Edit, Search, Settings, Star, Heart, Home, User, Bell, Calendar, Clock, Filter, MoreHorizontal, MoreVertical, Loader2, RotateCcw, Share, Download, Upload, Eye, EyeOff, Copy, Sparkles
+- Do NOT call hooks (useState, useEffect, useRef, useMemo, useCallback) inside conditionals, loops, or callbacks — hooks must be at the top level of the component function
+- Do NOT render list `.map()` items without a unique `key` prop — always add key={item.id} or key={index} as last resort
+- Do NOT use inline `style={{}}` for layout — use Tailwind classes. Inline styles are ONLY acceptable inside `<style>` tags for CSS variable overrides (e.g. `:root { --primary: ... }`)"""
+
+_COMMON_PATTERNS = """COMMON PATTERNS (use these instead of reinventing):
+
+Form submit + clear input:
+```jsx
+const [input, setInput] = useState("")
+const handleAdd = () => {
+  if (!input.trim()) return
+  setState(prev => ({ ...prev, items: [...prev.items, { id: crypto.randomUUID(), text: input.trim() }] }))
+  setInput("")
+}
+<div className="flex gap-2">
+  <Input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && handleAdd()} placeholder="Add item..." />
+  <Button onClick={handleAdd} size="icon"><Plus className="w-4 h-4" /></Button>
+</div>
+```
+
+Unique ID generation — use `crypto.randomUUID()`. Do NOT import uuid or nanoid.
+
+Date formatting — use `new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' }).format(date)` or `date.toLocaleDateString()`. Do NOT import date-fns, moment, or dayjs.
+
+Delete with confirmation — use Dialog component:
+```jsx
+const [deleteId, setDeleteId] = useState(null)
+<Dialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
+  <DialogContent>
+    <DialogHeader><DialogTitle>Delete this item?</DialogTitle></DialogHeader>
+    <DialogFooter>
+      <Button variant="outline" onClick={() => setDeleteId(null)}>Cancel</Button>
+      <Button variant="destructive" onClick={() => { handleDelete(deleteId); setDeleteId(null) }}>Delete</Button>
+    </DialogFooter>
+  </DialogContent>
+</Dialog>
+```"""
 
 # ─────────────────────────────────────────────────────────────────────────────
 # System Prompts (composed from shared blocks)
@@ -238,12 +291,16 @@ IMPORTANT:
 
 {_DO_NOT_RULES}
 
+{_COMMON_PATTERNS}
+
 RECOMMENDED WORKFLOW:
 1. Write src/App.jsx and any helper component files
 2. Write schema.json
-3. Run validate_jsx("src/App.jsx") to check for syntax issues
+3. Run validate_jsx on ALL .jsx files you created (not just App.jsx) — e.g. validate_jsx("src/App.jsx"), validate_jsx("src/Timer.jsx")
 4. Run check_imports("src/App.jsx") to verify all imports resolve
-5. Fix any issues found before finishing"""
+5. Fix any issues found before finishing
+
+NOTE: The Dialog component uses fixed positioning internally — this is fine and expected. It may display slightly off-center in the iframe preview, but works correctly on the deployed app."""
 
 AUGMENTATION_SYSTEM_PROMPT = """You are Conjure's prompt architect. The user will give you a short app idea. Your job is to expand it into a complete, opinionated specification that a code-generation model can implement without asking any follow-up questions.
 
@@ -286,11 +343,18 @@ SCHEMA:
 
 ITERATION_AUGMENTATION_SYSTEM_PROMPT = """You are Conjure's prompt architect. The user wants to modify an existing React+Tailwind app running in a 390×844px phone frame. The app uses shadcn/ui components (Button, Card, Badge, Input, Progress, Tabs, Switch, Separator, Dialog), Tailwind CSS variable classes (bg-background, text-foreground, bg-primary, etc.), and persists data via window.__conjure.getData()/setData().
 
-Expand their terse instruction into a clear, complete modification spec. Be opinionated — fill in details they left out. Keep under 400 words.
+Expand their terse instruction into a clear, complete modification spec. Be opinionated — fill in details they left out.
 
 CRITICAL: The modification spec should describe ONLY the changes requested. Do NOT re-architect the entire app. Keep modifications surgical — change the minimum needed to fulfill the request. Do NOT redesign layouts, swap component libraries, or refactor working code.
 
-Output ONLY the specification using the sections below.
+COMPLEXITY SCALING: Match your output detail to the input complexity.
+- TRIVIAL changes (color, text, single property, show/hide an element): Output ONLY "CHANGE SUMMARY" and "MODIFICATIONS" sections. Skip all other sections. Keep under 100 words.
+- SIMPLE changes (add a button, change layout of one area, swap a component): Output "CHANGE SUMMARY", "MODIFICATIONS", and "UI DETAILS". Keep under 200 words.
+- COMPLEX changes (new feature, new data fields, multi-component changes): Use ALL sections below. Keep under 400 words.
+
+When the user's exact request is simple, implement it directly. Do not over-engineer based on the expanded specification.
+
+Output ONLY the specification using the applicable sections below.
 
 CHANGE SUMMARY: One sentence describing the modification.
 
@@ -299,23 +363,23 @@ MODIFICATIONS:
 - Be precise: name the shadcn component to use (e.g. "Add a Button variant='destructive' size='sm'"), specify layout details (e.g. "flex row with gap-2"), and note Tailwind classes where relevant
 - Format: "- What to change: how to change it"
 
-DATA MODEL CHANGES:
+DATA MODEL CHANGES (skip for trivial/simple changes):
 - List any new state variables, removed state variables, or changes to the data shape
 - If the window.__conjure data shape changes, describe the new/modified keys
 - Format: "- fieldName (type): what changed [default: value]"
 - If no data model changes needed, write "None"
 
-UI DETAILS:
+UI DETAILS (skip for trivial changes):
 - Describe specific visual changes for the 390×844px viewport
 - Specify component variants, sizes, and Tailwind classes to use
 - Note layout approach (flex direction, gap, padding)
 - Format: "- Element: visual specification"
 
-PRESERVATION:
+PRESERVATION (skip for trivial changes):
 - List critical things that must NOT change
 - Format: "- Preserve: what and why"
 
-EDGE CASES:
+EDGE CASES (skip for trivial/simple changes):
 - At least 2 edge cases the modification introduces
 - Format: "- Scenario: how the app should respond" """
 
@@ -344,6 +408,8 @@ AGENTIC_REFINER_SYSTEM_PROMPT = f"""You are Conjure's app refiner. You modify ex
 {_COMPONENT_USAGE}
 
 {_DO_NOT_RULES}
+
+{_COMMON_PATTERNS}
 
 MANDATORY WORKFLOW (follow this exact order every time):
 1. ALWAYS run `list_files` first to see the project structure
@@ -708,7 +774,8 @@ def _validate_jsx_content(content: str, file_path: str) -> str:
         (r'''from\s+['"]react/jsx-runtime['"]''', "Do not import from 'react/jsx-runtime' — Vite handles JSX transform"),
         (r'''\brequire\s*\(''', "Do not use require() — this is an ESM project, use import"),
         (r'''from\s+['"]@/''', "Do not use @/ path aliases — use relative paths like ./components/ui/"),
-        (r'''\bimport\s+React\s+from\s+['"]react['"]''', "Do not import React default — import only hooks: import { useState } from 'react'"),
+        (r'''\bimport\s+React[\s,]+from\s+['"]react['"]''', "Do not import React default — import only hooks: import { useState } from 'react'"),
+        (r'''from\s+['"]@radix-ui/''', "Do not import from @radix-ui/* directly — use shadcn wrappers in ./components/ui/"),
     ]
     for pattern, message in bad_import_patterns:
         if re.search(pattern, content):
@@ -741,8 +808,19 @@ def _validate_jsx_content(content: str, file_path: str) -> str:
     if "React.lazy" in content or "React.lazy(" in content:
         issues.append("Do not use React.lazy() — no code splitting needed")
 
-    # Check for position fixed
-    if "position: fixed" in content or "position:fixed" in content or "fixed" in re.findall(r'className="[^"]*\bfixed\b[^"]*"', content):
+    # Check for position fixed — in inline styles, className strings, template literals, and cn() calls
+    has_fixed = False
+    if "position: fixed" in content or "position:fixed" in content:
+        has_fixed = True
+    if re.search(r'className="[^"]*\bfixed\b[^"]*"', content):
+        has_fixed = True
+    if re.search(r'className=\{[^}]*\bfixed\b[^}]*\}', content):
+        has_fixed = True
+    if re.search(r'`[^`]*\bfixed\b[^`]*`', content):
+        has_fixed = True
+    if re.search(r'cn\([^)]*\bfixed\b[^)]*\)', content):
+        has_fixed = True
+    if has_fixed:
         issues.append("Avoid position:fixed — it breaks inside iframe preview. Use flex layout with mt-auto.")
 
     if issues:
@@ -1026,7 +1104,11 @@ async def generate_app_pipeline(client, prompt: str, app_id: str, app_name: str,
             cleanup_build_dir(build_dir)
 
 
-async def iterate_app_pipeline(client, instruction: str, app_id: str, app_name: str, on_status=None, current_version: int = 1) -> tuple[bool, str, int]:
+async def iterate_app_pipeline(
+    client, instruction: str, app_id: str, app_name: str,
+    on_status=None, current_version: int = 1,
+    raw_instruction: str = "", chat_history: list[dict] | None = None,
+) -> tuple[bool, str, int]:
     """Iterate pipeline: setup → restore src → agentic refine → build+retry → deploy → cleanup.
     Returns (success, theme_color, new_version).
     on_status: Optional async callback(message) for progress reporting.
@@ -1063,7 +1145,12 @@ async def iterate_app_pipeline(client, instruction: str, app_id: str, app_name: 
         # 3. Agentic refinement
         if on_status:
             await on_status("Making your changes...")
-        messages = await client.refine_app(instruction, build_dir, on_progress=on_status and _tool_progress(on_status))
+        messages = await client.refine_app(
+            instruction, build_dir,
+            on_progress=on_status and _tool_progress(on_status),
+            raw_instruction=raw_instruction,
+            chat_history=chat_history,
+        )
 
         # 4. Build with retries — keep going until it works
         theme_color = _extract_theme_from_build(build_dir)
@@ -1146,6 +1233,19 @@ def post_build_quality_check(build_dir: str) -> list[str]:
         unique_colors = set(c.lower() for c in hex_colors)
         if len(unique_colors) > 5:
             warnings.append(f"App.jsx has {len(unique_colors)} hardcoded hex colors — prefer CSS variable classes (bg-primary, text-foreground, etc.)")
+
+        # Check that data persistence functions are used
+        if "window.__conjure.getData()" not in content and "__conjure.getData()" not in content:
+            warnings.append("App.jsx never calls getData() — app won't load persisted data on reload")
+        if "window.__conjure.setData(" not in content and "__conjure.setData(" not in content:
+            warnings.append("App.jsx never calls setData() — app won't persist any data")
+
+    # Check minimum dist size (< 5KB likely means blank page)
+    dist_dir = build_path / "dist"
+    if dist_dir.exists():
+        total_size = sum(f.stat().st_size for f in dist_dir.rglob("*") if f.is_file())
+        if total_size < 5000:
+            warnings.append(f"dist/ is only {total_size} bytes — likely a blank page or missing content")
 
     return warnings
 

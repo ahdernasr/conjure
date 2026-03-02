@@ -135,6 +135,38 @@ class MistralClientWrapper:
             logger.warning(f"Question answering failed: {e}")
             return "I had trouble reading the app's code. Try asking again or describe a change you'd like to make."
 
+    # -- Change Summary --------------------------------------------------------
+
+    async def summarize_changes(self, instruction: str) -> str:
+        """Generate a short, past-tense summary of what was changed.
+
+        Returns a 1-sentence confirmation like "Added a delete button to each item".
+        Falls back to a generic confirmation on failure.
+        """
+        try:
+            response = await self._client.chat.complete_async(
+                model=settings.MISTRAL_LARGE_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "The user asked for a change to their app and it was successfully applied. "
+                            "Write a single short sentence (under 12 words) confirming what was done, in past tense. "
+                            "Do NOT use quotes. Do NOT start with 'I'. Start with a past-tense verb like 'Added', 'Updated', 'Changed', 'Removed'."
+                        ),
+                    },
+                    {"role": "user", "content": instruction},
+                ],
+                temperature=0.2,
+                max_tokens=40,
+            )
+            result = response.choices[0].message.content.strip()
+            if result:
+                return result
+        except Exception as e:
+            logger.warning(f"Change summary failed: {e}")
+        return "Changes applied successfully"
+
     # -- Agentic Loop ----------------------------------------------------------
 
     async def run_agentic_loop(
@@ -159,8 +191,8 @@ class MistralClientWrapper:
         ]
 
         for turn in range(max_turns):
-            # First turn: force at least one tool call
-            tool_choice = "any" if turn == 0 else "auto"
+            # First turn: use "auto" so model can output planning text before tool calls
+            tool_choice = "auto"
 
             response = await self._client.chat.complete_async(
                 model=settings.DEVSTRAL_MODEL,
@@ -209,8 +241,8 @@ class MistralClientWrapper:
                     await on_progress(tool_name, args)
 
                 # Truncate very long results to avoid context overflow
-                if len(result) > 10000:
-                    result = result[:10000] + "\n... (truncated)"
+                if len(result) > 20000:
+                    result = result[:20000] + "\n... (truncated)"
 
                 messages.append({
                     "role": "tool",
@@ -245,17 +277,56 @@ class MistralClientWrapper:
 
     # -- Refiner Agent (Agentic) -----------------------------------------------
 
-    async def refine_app(self, instruction: str, build_dir: str, on_progress=None) -> list[dict]:
+    async def refine_app(
+        self,
+        instruction: str,
+        build_dir: str,
+        on_progress=None,
+        raw_instruction: str = "",
+        chat_history: list[dict] | None = None,
+    ) -> list[dict]:
         """Run agentic refinement loop. Returns message history."""
-        user_message = (
-            f"Modify the existing app according to this specification:\n\n{instruction}\n\n"
-            "Before making any changes, briefly plan:\n"
+        parts = []
+
+        # Include recent conversation for context on follow-ups
+        if chat_history:
+            parts.append("--- CONVERSATION HISTORY (context only) ---")
+            for msg in chat_history:
+                role = "User" if msg["role"] == "user" else "Assistant"
+                parts.append(f"{role}: {msg['content']}")
+            parts.append("--- END HISTORY ---\n")
+
+        # Pre-load current code so the refiner has it immediately (saves 2-3 tool call turns)
+        build_path = Path(build_dir)
+        app_jsx_path = build_path / "src" / "App.jsx"
+        schema_path = build_path / "schema.json"
+        if app_jsx_path.exists():
+            app_code = app_jsx_path.read_text(encoding="utf-8")
+            parts.append(f"CURRENT src/App.jsx:\n```jsx\n{app_code}\n```\n")
+        if schema_path.exists():
+            schema_code = schema_path.read_text(encoding="utf-8")
+            parts.append(f"CURRENT schema.json:\n```json\n{schema_code}\n```\n")
+
+        parts.append("Modify the existing app according to this specification:\n")
+
+        # Include raw instruction so the refiner sees exactly what the user typed
+        if raw_instruction and raw_instruction != instruction:
+            parts.append(f"USER'S EXACT REQUEST: {raw_instruction}\n")
+            parts.append(f"EXPANDED SPECIFICATION:\n{instruction}")
+        else:
+            parts.append(instruction)
+
+        parts.append(
+            "\n\nWhen the user's exact request is simple, implement it directly. Do not over-engineer based on the expanded specification.\n"
+            "\nBefore making any changes, briefly plan:\n"
             "1. What files need to change?\n"
             "2. What state variables are added/modified?\n"
             "3. Does the data shape (window.__conjure) need updating?\n"
             "4. Which existing UI elements are affected?\n"
             "Then proceed with the mandatory workflow."
         )
+
+        user_message = "\n".join(parts)
         return await self.run_agentic_loop(
             AGENTIC_REFINER_SYSTEM_PROMPT,
             user_message,
@@ -351,8 +422,8 @@ class MistralClientWrapper:
                 if on_progress:
                     await on_progress(tool_name, args)
 
-                if len(result) > 10000:
-                    result = result[:10000] + "\n... (truncated)"
+                if len(result) > 20000:
+                    result = result[:20000] + "\n... (truncated)"
 
                 messages.append({
                     "role": "tool",
