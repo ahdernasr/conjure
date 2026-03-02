@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, ArrowRight, ArrowUp, AlertCircle, Loader2, Timer, ListChecks, Trophy, Sparkles, Plus, Mic, Keyboard } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUp, AlertCircle, Loader2, Timer, ListChecks, Trophy, Plus, Mic, Keyboard } from "lucide-react";
 import AppGallery from "@/components/AppGallery";
 import ChatInput from "@/components/ChatInput";
 import InstallPrompt from "@/components/InstallPrompt";
@@ -14,15 +14,10 @@ import type { App } from "@/types/app";
 
 type View = "home" | "apps" | "create" | "chat";
 
-const SUGGESTIONS_NO_APPS = [
-  { icon: Timer, text: "A HIIT timer, 40s work 20s rest" },
-  { icon: ListChecks, text: "A packing list with checkboxes" },
-  { icon: Trophy, text: "Poker night scoreboard for 4" },
-];
-
-const SUGGESTIONS_WITH_APPS = [
-  { icon: Sparkles, text: "Summarize my day" },
-  { icon: ListChecks, text: "What's on my todo list?" },
+const SUGGESTIONS = [
+  { icon: Timer, text: "I'm doing a HIIT workout, 40s on, 20s rest, 8 rounds of burpees" },
+  { icon: ListChecks, text: "Track my water intake, I want to hit 3 liters today" },
+  { icon: Trophy, text: "Poker night scoreboard for me and my three friends" },
   { icon: Plus, text: "Build me a new app" },
 ];
 
@@ -125,7 +120,6 @@ export default function App() {
   const isTranscribing = voiceState === "transcribing";
   const hasConversation = cmdMessages.length > 0;
   const hasApps = apps.length > 0;
-  const suggestions = hasApps ? SUGGESTIONS_WITH_APPS : SUGGESTIONS_NO_APPS;
 
   const selectedApp: App | null = selectedAppId
     ? apps.find((a) => a.id === selectedAppId) ?? {
@@ -250,7 +244,7 @@ export default function App() {
           </header>
 
           {/* Main scrollable area */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto flex flex-col">
+          <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto flex flex-col">
             {!hasConversation ? (
               /* Idle state — suggestions above, orb below */
               <div className="flex-1 flex flex-col items-center justify-end px-6 pb-[10%]">
@@ -259,7 +253,7 @@ export default function App() {
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                     Try saying
                   </p>
-                  {suggestions.map((s, i) => (
+                  {SUGGESTIONS.map((s, i) => (
                     <button
                       key={i}
                       onClick={() => handleSuggestion(s.text)}
@@ -391,12 +385,12 @@ export default function App() {
               />
             </div>
           ) : hasConversation ? (
-            <div className="shrink-0 bg-background px-6 pb-[10%] pt-3 flex flex-col items-center">
+            <div className="shrink-0 bg-background px-6 py-4 flex flex-col items-center">
               <button
                 onClick={toggleRecording}
                 disabled={isTranscribing || cmdLoading}
                 className="relative flex items-center justify-center cursor-pointer transition-transform duration-300 hover:scale-105 active:scale-95 disabled:opacity-60 outline-none"
-                style={{ width: 77, height: 77 }}
+                style={{ width: 80, height: 80 }}
               >
                 <div
                   className="absolute inset-0"
@@ -411,9 +405,9 @@ export default function App() {
                       isRecording ? 'opacity-70' : 'opacity-30'
                     }`}
                     style={{
-                      inset: '-6px',
+                      inset: '-8px',
                       background: 'conic-gradient(from 0deg, #818cf8, #38bdf8, #818cf8)',
-                      filter: 'blur(16px)',
+                      filter: 'blur(20px)',
                       animation: `aurora-spin ${isRecording ? '3s' : '8s'} linear infinite`,
                     }}
                   />
@@ -424,7 +418,7 @@ export default function App() {
                     style={{
                       inset: '-2px',
                       background: 'conic-gradient(from 180deg, #c084fc, #2dd4bf, #c084fc)',
-                      filter: 'blur(12px)',
+                      filter: 'blur(16px)',
                       animation: `aurora-spin ${isRecording ? '2.5s' : '6s'} linear infinite reverse`,
                     }}
                   />
@@ -435,7 +429,7 @@ export default function App() {
                     style={{
                       inset: '4px',
                       background: 'conic-gradient(from 90deg, #fb7185, #f472b6, #fb7185)',
-                      filter: 'blur(10px)',
+                      filter: 'blur(12px)',
                       animation: 'aurora-spin 2s linear infinite',
                     }}
                   />
@@ -446,7 +440,7 @@ export default function App() {
                   </div>
                 )}
               </button>
-              <p className={`text-xs mt-1 mb-1 transition-colors duration-300 ${
+              <p className={`text-xs mt-2 transition-colors duration-300 ${
                 isRecording ? 'text-foreground font-medium' : 'text-muted-foreground'
               }`}>
                 {isRecording ? 'Listening...' : isTranscribing ? 'Transcribing...' : 'Tap to speak'}

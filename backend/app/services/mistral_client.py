@@ -32,6 +32,40 @@ class MistralClientWrapper:
         )
         return response.choices[0].message.content
 
+    # -- App Name Generation ---------------------------------------------------
+
+    async def generate_app_name(self, prompt: str) -> str:
+        """Generate a short, catchy app name from a user prompt.
+
+        Uses a lightweight call with minimal tokens. Returns 1-3 word name.
+        Falls back to first few words of the prompt on failure.
+        """
+        try:
+            response = await self._client.chat.complete_async(
+                model=settings.MISTRAL_LARGE_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Generate a short, catchy app name (1-3 words) for the described app. "
+                            "Reply with ONLY the name, nothing else. No quotes, no punctuation, no explanation. "
+                            "Examples: 'HIIT Timer', 'Pack List', 'Poker Night', 'Habit Loop', 'Meal Prep'"
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.5,
+                max_tokens=15,
+            )
+            name = response.choices[0].message.content.strip().strip('"\'')
+            if name and len(name) <= 30:
+                return name
+        except Exception as e:
+            logger.warning(f"App name generation failed: {e}")
+        # Fallback: first 3 words of the prompt
+        words = prompt.strip().split()[:3]
+        return " ".join(words)[:30]
+
     # -- Prompt Augmentation ---------------------------------------------------
 
     async def augment_prompt(self, prompt: str, system_prompt: str) -> str:

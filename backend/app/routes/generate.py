@@ -80,14 +80,14 @@ async def generate_app(request: GenerateRequest, db=Depends(get_db)):
         client = MistralClientWrapper()
 
         try:
-            # Pass 1: Augment prompt
+            # Pass 1: Augment prompt + generate name in parallel
             await queue.put({"type": "status", "message": "Understanding what you need..."})
-            augmented_prompt = await client.augment_prompt(
-                request.prompt, AUGMENTATION_SYSTEM_PROMPT
+            augmented_prompt, generated_name = await asyncio.gather(
+                client.augment_prompt(request.prompt, AUGMENTATION_SYSTEM_PROMPT),
+                client.generate_app_name(request.prompt),
             )
-            app_name = extract_app_name_from_spec(
-                augmented_prompt, request.prompt.strip()[:50]
-            )
+            # Prefer the spec-extracted name, fall back to LLM-generated name
+            app_name = extract_app_name_from_spec(augmented_prompt, generated_name)
             logger.info(f"Augmented prompt for {app_id}: app_name={app_name}")
 
             # Pass 2: Generate
