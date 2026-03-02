@@ -88,6 +88,27 @@ class AppService:
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
 
+    async def backfill_theme_colors(self) -> int:
+        """Update apps with default theme color to a semantic one."""
+        from .generator import generate_semantic_color
+        cursor = await self.db.execute(
+            "SELECT id, name, description FROM apps WHERE theme_color = ?",
+            ("#6366f1",)
+        )
+        rows = await cursor.fetchall()
+        count = 0
+        for row in rows:
+            color = generate_semantic_color(row["name"], row["description"])
+            if color != "#6366f1":
+                await self.db.execute(
+                    "UPDATE apps SET theme_color = ? WHERE id = ?",
+                    (color, row["id"])
+                )
+                count += 1
+        if count:
+            await self.db.commit()
+        return count
+
     async def add_message(self, app_id: str, role: str, content: str, version: int | None = None) -> dict:
         """Add a chat message for an app."""
         cursor = await self.db.execute(

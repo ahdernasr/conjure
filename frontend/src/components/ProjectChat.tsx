@@ -264,7 +264,7 @@ export default function ProjectChat({ app, onBack, onInstall, initialInstruction
                 onClick={toggleRecording}
                 disabled={isTranscribing || isIterating}
                 className="relative flex items-center justify-center cursor-pointer transition-transform duration-300 hover:scale-105 active:scale-95 disabled:opacity-60 outline-none"
-                style={{ width: 96, height: 96 }}
+                style={{ width: 80, height: 80 }}
               >
                 <div
                   className="absolute inset-0"
@@ -276,23 +276,23 @@ export default function ProjectChat({ app, onBack, onInstall, initialInstruction
                 >
                   <div
                     className={`absolute rounded-full transition-opacity duration-700 ${
-                      isRecording ? 'opacity-70' : 'opacity-30'
+                      isRecording ? 'opacity-70' : 'opacity-50'
                     }`}
                     style={{
-                      inset: '-10px',
+                      inset: '-8px',
                       background: 'conic-gradient(from 0deg, #818cf8, #38bdf8, #818cf8)',
-                      filter: 'blur(24px)',
+                      filter: 'blur(20px)',
                       animation: `aurora-spin ${isRecording ? '3s' : '8s'} linear infinite`,
                     }}
                   />
                   <div
                     className={`absolute rounded-full transition-opacity duration-700 ${
-                      isRecording ? 'opacity-60' : 'opacity-20'
+                      isRecording ? 'opacity-60' : 'opacity-40'
                     }`}
                     style={{
                       inset: '-2px',
                       background: 'conic-gradient(from 180deg, #c084fc, #2dd4bf, #c084fc)',
-                      filter: 'blur(19px)',
+                      filter: 'blur(16px)',
                       animation: `aurora-spin ${isRecording ? '2.5s' : '6s'} linear infinite reverse`,
                     }}
                   />
@@ -301,9 +301,9 @@ export default function ProjectChat({ app, onBack, onInstall, initialInstruction
                       isRecording ? 'opacity-50' : 'opacity-0'
                     }`}
                     style={{
-                      inset: '5px',
+                      inset: '4px',
                       background: 'conic-gradient(from 90deg, #fb7185, #f472b6, #fb7185)',
-                      filter: 'blur(14px)',
+                      filter: 'blur(12px)',
                       animation: 'aurora-spin 2s linear infinite',
                     }}
                   />

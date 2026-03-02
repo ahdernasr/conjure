@@ -19,6 +19,7 @@ class AppResponse(AppBase):
     created_at: datetime
     updated_at: datetime
     status: str = "active"
+    version: int = 1
 
     model_config = {"from_attributes": True}
 

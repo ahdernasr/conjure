@@ -3,14 +3,25 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
+import aiosqlite
+
 from .config import settings
 from .database import init_db
 from .routes import apps, chat, generate, command, voice
+from .services.app_service import AppService
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    # Backfill semantic theme colors for existing apps
+    async with aiosqlite.connect(settings.DATABASE_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        service = AppService(db)
+        updated = await service.backfill_theme_colors()
+        if updated:
+            import logging
+            logging.getLogger(__name__).info(f"Backfilled theme colors for {updated} apps")
     yield
 
 

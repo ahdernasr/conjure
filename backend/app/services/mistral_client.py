@@ -47,9 +47,11 @@ class MistralClientWrapper:
                     {
                         "role": "system",
                         "content": (
-                            "Generate a short, catchy app name (1-3 words) for the described app. "
+                            "Generate a plain, descriptive name (2-4 words) for the described app. "
+                            "It should describe what the app does, NOT be a catchy brand name. "
                             "Reply with ONLY the name, nothing else. No quotes, no punctuation, no explanation. "
-                            "Examples: 'HIIT Timer', 'Pack List', 'Poker Night', 'Habit Loop', 'Meal Prep'"
+                            "Good examples: 'HIIT Timer', 'Poker Scoreboard', 'Water Tracker', 'Packing Checklist', 'Habit Tracker' "
+                            "Bad examples: 'PokerPal', 'HydroFlow', 'PackMate', 'FitPulse' — never use these mashup brand names."
                         ),
                     },
                     {"role": "user", "content": prompt},
@@ -152,7 +154,8 @@ class MistralClientWrapper:
                         "role": "system",
                         "content": (
                             "You are a helpful assistant for Conjure, a platform that builds small React+Tailwind phone apps. "
-                            "The user is asking about their app. Answer concisely in 2-4 sentences based on the app's source code below.\n\n"
+                            "The user is asking about their app. Answer concisely in 2-4 sentences based on the app's source code below. "
+                            "Use plain text only — no markdown, no **bold**, no *italics*, no bullet points, no code fences.\n\n"
                             f"{context}"
                         ),
                     },
@@ -186,7 +189,8 @@ class MistralClientWrapper:
                         "content": (
                             "The user asked for a change to their app and it was successfully applied. "
                             "Write a single short sentence (under 12 words) confirming what was done, in past tense. "
-                            "Do NOT use quotes. Do NOT start with 'I'. Start with a past-tense verb like 'Added', 'Updated', 'Changed', 'Removed'."
+                            "Do NOT use quotes. Do NOT start with 'I'. Start with a past-tense verb like 'Added', 'Updated', 'Changed', 'Removed'. "
+                            "Use plain text only — no markdown formatting."
                         ),
                     },
                     {"role": "user", "content": instruction},

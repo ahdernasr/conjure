@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from "react";
-import { ArrowLeft, ArrowRight, ArrowUp, AlertCircle, Loader2, Timer, ListChecks, Trophy, Plus, Mic, Keyboard } from "lucide-react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { ArrowLeft, ArrowRight, ArrowUp, AlertCircle, Loader2, Timer, ListChecks, Trophy, Mic, Keyboard, Zap } from "lucide-react";
 import AppGallery from "@/components/AppGallery";
 import ChatInput from "@/components/ChatInput";
 import InstallPrompt from "@/components/InstallPrompt";
@@ -18,7 +18,6 @@ const SUGGESTIONS = [
   { icon: Timer, text: "I'm doing a HIIT workout, 40s on, 20s rest, 8 rounds of burpees" },
   { icon: ListChecks, text: "Track my water intake, I want to hit 3 liters today" },
   { icon: Trophy, text: "Poker night scoreboard for me and my three friends" },
-  { icon: Plus, text: "Build me a new app" },
 ];
 
 export default function App() {
@@ -120,6 +119,30 @@ export default function App() {
   const isTranscribing = voiceState === "transcribing";
   const hasConversation = cmdMessages.length > 0;
   const hasApps = apps.length > 0;
+
+  // Generate contextual command suggestions based on existing apps
+  const commandSuggestions = useMemo(() => {
+    if (!hasApps) return [];
+    const cmds: string[] = [];
+    for (const app of apps.slice(0, 4)) {
+      const n = app.name.toLowerCase();
+      if (n.includes("todo") || n.includes("task") || n.includes("list")) {
+        cmds.push(`What's left on my ${app.name}?`);
+      } else if (n.includes("timer") || n.includes("hiit") || n.includes("workout")) {
+        cmds.push(`Set my ${app.name} to 30s work, 10s rest`);
+      } else if (n.includes("water") || n.includes("hydra") || n.includes("drink")) {
+        cmds.push(`Log a glass of water`);
+      } else if (n.includes("score") || n.includes("poker") || n.includes("game")) {
+        cmds.push(`Add 5 points to my score in ${app.name}`);
+      } else if (n.includes("habit") || n.includes("track")) {
+        cmds.push(`Mark today's habit as done in ${app.name}`);
+      } else {
+        cmds.push(`What's the status of my ${app.name}?`);
+      }
+      if (cmds.length >= 2) break;
+    }
+    return cmds;
+  }, [apps, hasApps]);
 
   const selectedApp: App | null = selectedAppId
     ? apps.find((a) => a.id === selectedAppId) ?? {
@@ -250,7 +273,7 @@ export default function App() {
               /* Idle state — suggestions above, orb below */
               <div className="flex-1 flex flex-col items-center justify-end px-6 pb-[10%]">
                 {/* Suggestion chips */}
-                <div className="flex flex-col gap-2 w-full max-w-lg mb-[10%]">
+                <div className="flex flex-col gap-2 w-full max-w-lg">
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
                     Try saying
                   </p>
@@ -271,6 +294,33 @@ export default function App() {
                   ))}
                 </div>
 
+                {/* Contextual command suggestions — only when apps exist */}
+                {commandSuggestions.length > 0 && (
+                  <div className="flex flex-col gap-2 w-full max-w-lg mt-4 mb-[10%]">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                      Your apps
+                    </p>
+                    {commandSuggestions.map((cmd, i) => (
+                      <button
+                        key={`cmd-${i}`}
+                        onClick={() => handleSuggestion(cmd)}
+                        className="flex items-center gap-3 text-left px-4 py-3 rounded-xl
+                          border border-border text-sm text-foreground
+                          hover:bg-secondary transition-colors duration-150
+                          animate-fade-in-up"
+                        style={{ animationDelay: `${(SUGGESTIONS.length + i + 1) * 0.05}s` }}
+                      >
+                        <Zap className="w-4 h-4 text-muted-foreground shrink-0" />
+                        <span className="flex-1">{cmd}</span>
+                        <ArrowRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Spacer when no command suggestions */}
+                {commandSuggestions.length === 0 && <div className="mb-[10%]" />}
+
                 {/* Aurora orb — speech mode only */}
                 {inputMode === "speech" && (
                   <div className="flex flex-col items-center">
@@ -290,7 +340,7 @@ export default function App() {
                       >
                         <div
                           className={`absolute rounded-full transition-opacity duration-700 ${
-                            isRecording ? 'opacity-70' : 'opacity-30'
+                            isRecording ? 'opacity-70' : 'opacity-50'
                           }`}
                           style={{
                             inset: '-8px',
@@ -301,7 +351,7 @@ export default function App() {
                         />
                         <div
                           className={`absolute rounded-full transition-opacity duration-700 ${
-                            isRecording ? 'opacity-60' : 'opacity-20'
+                            isRecording ? 'opacity-60' : 'opacity-40'
                           }`}
                           style={{
                             inset: '-2px',
@@ -403,7 +453,7 @@ export default function App() {
                 >
                   <div
                     className={`absolute rounded-full transition-opacity duration-700 ${
-                      isRecording ? 'opacity-70' : 'opacity-30'
+                      isRecording ? 'opacity-70' : 'opacity-50'
                     }`}
                     style={{
                       inset: '-8px',
@@ -414,7 +464,7 @@ export default function App() {
                   />
                   <div
                     className={`absolute rounded-full transition-opacity duration-700 ${
-                      isRecording ? 'opacity-60' : 'opacity-20'
+                      isRecording ? 'opacity-60' : 'opacity-40'
                     }`}
                     style={{
                       inset: '-2px',

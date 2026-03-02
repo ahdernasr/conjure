@@ -309,7 +309,7 @@ CRITICAL SCOPE RULE: These are MICRO-APPS — small, single-purpose utilities di
 
 Output ONLY the specification using the sections below. Be opinionated — never say "optionally" or "you could". Fill in every detail the user left out. Keep under 800 words total.
 
-APP_NAME: A short, catchy name (2-3 words max). This is for internal metadata ONLY — the generated app must NOT display it as a visible header, logo, or branding in the UI.
+APP_NAME: A plain, descriptive name (2-4 words) that describes what the app does. NOT a catchy brand name. Good: "HIIT Timer", "Poker Scoreboard", "Water Tracker". Bad: "PokerPal", "FitPulse", "HydroFlow". This is for internal metadata ONLY — the generated app must NOT display it as a visible header, logo, or branding in the UI.
 
 DESCRIPTION: One sentence explaining what the app does and who it's for.
 
@@ -1065,6 +1065,8 @@ async def generate_app_pipeline(client, prompt: str, app_id: str, app_name: str,
 
         # 3. Build with retries — keep going until it works
         theme_color = _extract_theme_from_build(build_dir)
+        if theme_color == "#6366f1":
+            theme_color = generate_semantic_color(app_name)
         if on_status:
             await on_status("Putting it all together...")
         last_error = None
@@ -1078,13 +1080,13 @@ async def generate_app_pipeline(client, prompt: str, app_id: str, app_name: str,
             error_sig = output.strip()[:200]
             if last_error and error_sig == last_error:
                 logger.error(f"Duplicate build error for {app_id}, aborting retries")
-                return False, "#6366f1"
+                return False, generate_semantic_color(app_name)
             last_error = error_sig
             if on_status:
                 await on_status("Tweaking a few things...")
             messages = await client.fix_build_error(output, build_dir, messages, on_progress=on_status and _tool_progress(on_status))
         else:
-            return False, "#6366f1"
+            return False, generate_semantic_color(app_name)
 
         # 4. Post-build quality check
         qc_warnings = post_build_quality_check(build_dir)
@@ -1099,7 +1101,7 @@ async def generate_app_pipeline(client, prompt: str, app_id: str, app_name: str,
 
     except Exception as e:
         logger.error(f"Pipeline failed for {app_id}: {e}")
-        return False, "#6366f1"
+        return False, generate_semantic_color(app_name)
     finally:
         if build_dir:
             cleanup_build_dir(build_dir)
@@ -1155,6 +1157,8 @@ async def iterate_app_pipeline(
 
         # 4. Build with retries — keep going until it works
         theme_color = _extract_theme_from_build(build_dir)
+        if theme_color == "#6366f1":
+            theme_color = generate_semantic_color(app_name)
         if on_status:
             await on_status("Putting it all together...")
         last_error = None
@@ -1168,13 +1172,13 @@ async def iterate_app_pipeline(
             error_sig = output.strip()[:200]
             if last_error and error_sig == last_error:
                 logger.error(f"Duplicate build error for {app_id}, aborting retries")
-                return False, "#6366f1"
+                return False, generate_semantic_color(app_name)
             last_error = error_sig
             if on_status:
                 await on_status("Tweaking a few things...")
             messages = await client.fix_build_error(output, build_dir, messages, on_progress=on_status and _tool_progress(on_status))
         else:
-            return False, "#6366f1"
+            return False, generate_semantic_color(app_name)
 
         # 5. Post-build quality check
         qc_warnings = post_build_quality_check(build_dir)
@@ -1190,7 +1194,7 @@ async def iterate_app_pipeline(
 
     except Exception as e:
         logger.error(f"Iterate pipeline failed for {app_id}: {e}")
-        return False, "#6366f1", current_version
+        return False, generate_semantic_color(app_name), current_version
     finally:
         if build_dir:
             cleanup_build_dir(build_dir)
@@ -1276,6 +1280,43 @@ def _extract_theme_from_build(build_dir: str) -> str:
                 return color
 
     return "#6366f1"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Semantic color mapping (keyword → Tailwind palette color)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_SEMANTIC_COLORS = [
+    (("water", "hydra", "drink", "liquid", "h2o"), "#38bdf8"),       # sky-400
+    (("timer", "hiit", "workout", "exercise", "fitness", "gym"), "#f97316"),  # orange-500
+    (("todo", "task", "checklist", "packing"), "#22c55e"),           # green-500
+    (("score", "poker", "game", "play", "trivia", "quiz"), "#a855f7"),  # purple-500
+    (("habit", "streak", "daily", "routine"), "#14b8a6"),            # teal-500
+    (("food", "recipe", "meal", "cook", "calorie", "diet"), "#ef4444"),  # red-500
+    (("money", "budget", "expense", "finance", "savings"), "#eab308"),  # yellow-500
+    (("music", "song", "playlist", "audio", "sound"), "#ec4899"),    # pink-500
+    (("weather", "temperature", "forecast"), "#06b6d4"),             # cyan-500
+    (("note", "journal", "diary", "write", "memo"), "#8b5cf6"),      # violet-500
+    (("sleep", "meditation", "relax", "breathe"), "#6366f1"),        # indigo-500
+    (("photo", "image", "camera", "gallery"), "#f43f5e"),            # rose-500
+]
+
+_FALLBACK_PALETTE = [
+    "#f97316", "#22c55e", "#a855f7", "#14b8a6",
+    "#ef4444", "#eab308", "#ec4899", "#06b6d4",
+    "#8b5cf6", "#f43f5e", "#38bdf8", "#84cc16",
+]
+
+
+def generate_semantic_color(name: str, description: str = "") -> str:
+    """Return a hex color that semantically matches the app's purpose."""
+    text = f"{name} {description}".lower()
+    for keywords, color in _SEMANTIC_COLORS:
+        if any(kw in text for kw in keywords):
+            return color
+    # Hash-based fallback from curated palette
+    h = sum(ord(c) for c in name)
+    return _FALLBACK_PALETTE[h % len(_FALLBACK_PALETTE)]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
