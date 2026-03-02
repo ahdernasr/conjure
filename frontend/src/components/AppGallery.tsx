@@ -109,11 +109,9 @@ export default function AppGallery({ apps, loading, onSelectApp, onBack, onDelet
                     className="flex items-center gap-3 flex-1 min-w-0 text-left transition-colors hover:bg-secondary/50 rounded-lg -ml-2 pl-2 -my-1 py-1"
                   >
                     <div
-                      className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold shrink-0"
+                      className="w-10 h-10 rounded-lg shrink-0"
                       style={{ backgroundColor: color }}
-                    >
-                      {app.name.charAt(0).toUpperCase()}
-                    </div>
+                    />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{app.name}</p>
                       <p className="text-xs text-muted-foreground">

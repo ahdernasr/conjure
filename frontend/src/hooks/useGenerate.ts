@@ -14,13 +14,13 @@ export function useGenerate(onAppCreated: () => void) {
     setTraceMessages((prev) => [...prev, message]);
   }, []);
 
-  const generate = async (prompt: string, goldenId?: string) => {
+  const generate = async (prompt: string) => {
     setStatus("generating");
     setError(null);
     setGeneratedAppId(null);
     setTraceMessages([]);
     try {
-      const result = await generateApp(prompt, goldenId, onTrace);
+      const result = await generateApp(prompt, onTrace);
       setGeneratedAppId(result.id);
       setGeneratedAppName(result.name);
       setStatus("done");

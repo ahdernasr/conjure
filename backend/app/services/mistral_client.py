@@ -5,8 +5,6 @@ from pathlib import Path
 from mistralai import Mistral
 from ..config import settings
 from .generator import (
-    GENERATOR_SYSTEM_PROMPT,
-    REFINER_SYSTEM_PROMPT,
     AGENTIC_GENERATOR_SYSTEM_PROMPT,
     AGENTIC_REFINER_SYSTEM_PROMPT,
     AGENTIC_TOOLS,
@@ -205,6 +203,91 @@ class MistralClientWrapper:
             logger.warning(f"Change summary failed: {e}")
         return "Changes applied successfully"
 
+    # -- Generation Verification -----------------------------------------------
+
+    async def verify_generation(self, prompt: str, code: str) -> tuple[bool, str]:
+        """Check whether generated App.jsx actually implements the user's request.
+
+        Returns (passed, reason). Uses Mistral Large for fast judgement.
+        """
+        try:
+            response = await self._client.chat.complete_async(
+                model=settings.MISTRAL_LARGE_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a code reviewer. The user asked for an app and a model generated React code. "
+                            "Determine if the generated code is a real implementation of what was requested, "
+                            "or if it is a placeholder, skeleton, empty shell, or completely unrelated. "
+                            "A real implementation has state management, UI components, and interactivity matching the request. "
+                            "A placeholder just shows static text like 'Hello' or 'App' with no real functionality. "
+                            "Reply with exactly PASS or FAIL followed by a short reason (under 15 words). "
+                            "Example: PASS - implements water tracking with daily goal and history. "
+                            "Example: FAIL - just a placeholder div with no actual functionality."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": f"USER REQUEST:\n{prompt[:500]}\n\nGENERATED CODE:\n{code[:6000]}",
+                    },
+                ],
+                temperature=0.0,
+                max_tokens=50,
+            )
+            result = response.choices[0].message.content.strip()
+            if result.upper().startswith("PASS"):
+                return True, result
+            return False, result
+        except Exception as e:
+            logger.warning(f"Generation verification failed, assuming pass: {e}")
+            return True, "verification error, assuming pass"
+
+    async def verify_iteration(self, instruction: str, code_before: str, code_after: str) -> tuple[bool, str]:
+        """Check whether a code iteration actually applied the requested changes.
+
+        Returns (passed, reason). Compares before/after code against the instruction.
+        """
+        try:
+            # Truncate to fit context
+            before_snippet = code_before[:3000]
+            after_snippet = code_after[:3000]
+
+            response = await self._client.chat.complete_async(
+                model=settings.MISTRAL_LARGE_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a code reviewer. The user requested changes to their React app. "
+                            "You will see the BEFORE code, the AFTER code, and what the user asked for. "
+                            "Determine if the AFTER code actually implements ALL the requested changes. "
+                            "Check each part of the request individually. If any part is missing, FAIL. "
+                            "Reply with exactly PASS or FAIL followed by a short reason (under 20 words). "
+                            "Example: PASS - added green highlight to current match and score display per set. "
+                            "Example: FAIL - only added scores, did not highlight current match in green."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            f"USER REQUEST:\n{instruction[:500]}\n\n"
+                            f"BEFORE CODE:\n{before_snippet}\n\n"
+                            f"AFTER CODE:\n{after_snippet}"
+                        ),
+                    },
+                ],
+                temperature=0.0,
+                max_tokens=50,
+            )
+            result = response.choices[0].message.content.strip()
+            if result.upper().startswith("PASS"):
+                return True, result
+            return False, result
+        except Exception as e:
+            logger.warning(f"Iteration verification failed, assuming pass: {e}")
+            return True, "verification error, assuming pass"
+
     # -- Agentic Loop ----------------------------------------------------------
 
     async def run_agentic_loop(
@@ -298,13 +381,14 @@ class MistralClientWrapper:
     async def generate_app(self, prompt: str, build_dir: str, on_progress=None) -> list[dict]:
         """Run agentic generation loop. Returns message history."""
         user_message = (
-            f"Create the following app according to this specification:\n\n{prompt}\n\n"
-            "Before writing any files, briefly plan:\n"
-            "1. What React state variables do you need?\n"
-            "2. What data shape for window.__conjure?\n"
-            "3. Which shadcn components will you use?\n"
-            "4. Layout structure top-to-bottom (how will the 390×844px screen be divided?)\n"
-            "Then proceed to write the files."
+            f"Build this app:\n\n{prompt}\n\n"
+            "Plan briefly, then write the files:\n"
+            "1. State variables and data shape for window.__conjure\n"
+            "2. Which shadcn components to use\n"
+            "3. Layout structure for the 390x844px phone screen\n\n"
+            "Then call write_file(\"src/App.jsx\", ...) with the COMPLETE app code, "
+            "followed by write_file(\"schema.json\", ...). "
+            "Do NOT leave any placeholder or TODO — write the full working implementation."
         )
         return await self.run_agentic_loop(
             AGENTIC_GENERATOR_SYSTEM_PROMPT,
@@ -355,13 +439,15 @@ class MistralClientWrapper:
             parts.append(instruction)
 
         parts.append(
-            "\n\nWhen the user's exact request is simple, implement it directly. Do not over-engineer based on the expanded specification.\n"
-            "\nBefore making any changes, briefly plan:\n"
-            "1. What files need to change?\n"
-            "2. What state variables are added/modified?\n"
-            "3. Does the data shape (window.__conjure) need updating?\n"
-            "4. Which existing UI elements are affected?\n"
-            "Then proceed with the mandatory workflow."
+            "\n\nIMPORTANT: Apply ALL of the requested changes, not just some. "
+            "If the request has multiple parts, implement every single one.\n\n"
+            "Steps:\n"
+            "1. Read current src/App.jsx and schema.json\n"
+            "2. Identify every change the user asked for\n"
+            "3. Rewrite src/App.jsx with ALL changes applied\n"
+            "4. Update schema.json if data shape or actions changed\n"
+            "5. Run validate_jsx and check_imports\n\n"
+            "Call write_file to save your changes. Do NOT just plan — actually write the modified code."
         )
 
         user_message = "\n".join(parts)
@@ -471,39 +557,6 @@ class MistralClientWrapper:
                 })
 
         return messages
-
-    # -- Legacy (non-agentic, for golden fallback) -----------------------------
-
-    async def generate_app_legacy(self, prompt: str, app_id: str) -> str:
-        """Send prompt to Devstral with generator system prompt (legacy HTML mode).
-        Returns raw response text (HTML, possibly with markdown fences)."""
-        system_prompt = GENERATOR_SYSTEM_PROMPT.replace("{{APP_ID}}", app_id)
-
-        response = await self._client.chat.complete_async(
-            model=settings.DEVSTRAL_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Create this app: {prompt}"},
-            ],
-            temperature=0.3,
-        )
-        return response.choices[0].message.content
-
-    async def refine_app_legacy(self, existing_html: str, instruction: str, app_id: str) -> str:
-        """Modify existing app based on user instruction (legacy HTML mode).
-        Returns raw response text (updated HTML)."""
-        response = await self._client.chat.complete_async(
-            model=settings.DEVSTRAL_MODEL,
-            messages=[
-                {"role": "system", "content": REFINER_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": f"Here is the existing app HTML:\n\n{existing_html}\n\nModification requested: {instruction}",
-                },
-            ],
-            temperature=0.2,
-        )
-        return response.choices[0].message.content
 
     # -- Phase 4: Voice helpers ------------------------------------------------
 

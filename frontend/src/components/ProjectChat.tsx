@@ -155,11 +155,9 @@ export default function ProjectChat({ app, onBack, onInstall, initialInstruction
 
         <div className="flex items-center gap-2.5 flex-1 min-w-0">
           <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold shrink-0"
+            className="w-8 h-8 rounded-lg shrink-0"
             style={{ backgroundColor: color }}
-          >
-            {app.name.charAt(0).toUpperCase()}
-          </div>
+          />
           <div className="min-w-0">
             <h1 className="text-sm font-semibold truncate">{app.name}</h1>
             <p className="text-[11px] text-muted-foreground">
@@ -196,12 +194,6 @@ export default function ProjectChat({ app, onBack, onInstall, initialInstruction
             <PhonePreview appId={app.id} iframeKey={iframeKey} activeVersion={activeVersion} latestVersion={version} />
             {versionSwitcher}
           </div>
-        </div>
-
-        {/* Mobile phone preview */}
-        <div className="md:hidden px-4 py-4 border-b border-border">
-          <PhonePreview appId={app.id} iframeKey={iframeKey} activeVersion={activeVersion} latestVersion={version} />
-          {versionSwitcher}
         </div>
 
         {/* Right panel: chat */}

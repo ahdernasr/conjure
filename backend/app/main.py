@@ -1,5 +1,8 @@
-from fastapi import FastAPI
+from pathlib import Path
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 
@@ -9,6 +12,9 @@ from .config import settings
 from .database import init_db
 from .routes import apps, chat, generate, command, voice
 from .services.app_service import AppService
+
+# Built frontend directory (populated by Docker build or manual `npm run build`)
+STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 @asynccontextmanager
@@ -35,7 +41,7 @@ app = FastAPI(
 # CORS — allow frontend dev server
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.FRONTEND_URL, "http://localhost:5173"],
+    allow_origins=[settings.FRONTEND_URL, "http://localhost:5173", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -50,3 +56,15 @@ app.include_router(voice.router, prefix="/api/voice", tags=["voice"])
 
 # Static file serving for generated apps
 app.mount("/apps", StaticFiles(directory=settings.APPS_DIR, html=True), name="generated-apps")
+
+# Serve built frontend in production (SPA with fallback to index.html)
+if STATIC_DIR.is_dir():
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="frontend-assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(request: Request, full_path: str):
+        """Serve frontend static files, falling back to index.html for SPA routing."""
+        file_path = STATIC_DIR / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(STATIC_DIR / "index.html")
