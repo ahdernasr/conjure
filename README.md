@@ -6,6 +6,10 @@ Conjure turns natural language into fully functional React PWAs. Generate a wate
 
 Once you have a few apps, the Command Plane ties them together. One voice interface that reads each app's schema, understands what it can do, and executes actions across all of them. "Log a glass of water." "Who's playing next in the tournament?" No app switching.
 
+## Live demo
+
+https://balanced-hope-production-6d7f.up.railway.app/
+
 ## Why this exists
 
 You're hosting a ping pong tournament with friends. You need a bracket for 8 players, best of 3, single elimination. You could use Challonge, make an account, configure a bunch of settings, and share a link nobody bookmarks. Or you could say one sentence and have a custom app on your phone in 15 seconds.
